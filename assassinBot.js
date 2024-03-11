@@ -27,7 +27,7 @@ client.once('ready', () => {
 
 function initializeDatabase() {
   db.run(`CREATE TABLE IF NOT EXISTS players (
-    id INTEGER PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     discord_id TEXT UNIQUE,
     name TEXT,
     team_id INTEGER,
@@ -149,14 +149,15 @@ client.on('interactionCreate', async (interaction) => {
       }
   
       const name = interaction.user.username;
+      const playerId = Math.random().toString(36).substring(7); // Generate a unique player ID
   
-      db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId, name], (err) => {
+      db.run('INSERT INTO players (id, discord_id, name) VALUES (?, ?, ?)', [playerId, userId, name], (err) => {
         if (err) {
           console.error('Error registering player:', err);
           return interaction.reply('An error occurred while registering. Please try again later.');
         }
   
-        interaction.reply('You have been successfully registered for the game!');
+        interaction.reply(`You have been successfully registered for the game! Your player ID is: ${playerId}`);
       });
     });
   }
@@ -504,8 +505,15 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
+async function isGameManager(interaction) {
+  const gameManagerRoleId = config.roles.game_manager;
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  return member.roles.cache.has(gameManagerRoleId);
+}
+
 async function handleGameStart(interaction) {
   const userId = interaction.user.id;
+  const isAdmin = await isGameManager(interaction);
 
   db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
     if (err) {
@@ -513,7 +521,7 @@ async function handleGameStart(interaction) {
       return interaction.reply('An error occurred while starting the game. Please try again later.');
     }
 
-    if (!playerRow || playerRow.is_admin !== 1) {
+    if (!isAdmin) {
       return interaction.reply('You must be an admin to start the game.');
     }
 
@@ -635,6 +643,7 @@ async function handleDisputeResolution(interaction) {
   const userId = interaction.user.id;
   const disputeId = interaction.options.getString('dispute_id');
   const resolution = interaction.options.getString('resolution');
+  const isAdmin = await isGameManager(interaction);
 
   db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
     if (err) {
@@ -642,7 +651,7 @@ async function handleDisputeResolution(interaction) {
       return interaction.reply('An error occurred while resolving the dispute. Please try again later.');
     }
 
-    if (!playerRow || playerRow.is_admin !== 1) {
+    if (!isAdmin) {
       return interaction.reply('You must be an admin to resolve disputes.');
     }
 
