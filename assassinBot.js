@@ -1,4 +1,4 @@
-import 'discord.js';
+import Discord from 'discord.js';
 import { TextInputComponent } from 'discord.js';
 import { load } from 'js-yaml';
 import { readFileSync } from 'fs';
