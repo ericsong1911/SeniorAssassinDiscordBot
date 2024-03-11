@@ -1,702 +1,864 @@
-import Discord from 'discord.js';
-import { TextInputComponent } from 'discord.js';
-import { load } from 'js-yaml';
-import { readFileSync } from 'fs';
-import { Sequelize, DataTypes } from 'sequelize';
+const { Client, GatewayIntentBits, MessageAttachment, MessageEmbed } = require('discord.js');
+const yaml = require('yaml');
+const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
 
-// Read the configuration file
-const config = load(readFileSync('config.yml', 'utf8'));
-
-// Set up the database connection
-const sequelize = new Sequelize({
-  dialect: config.database.dialect,
-  storage: config.database.storage,
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
 });
 
-// Define the models
-const Player = sequelize.define('Player', {
-    id: {
-      type: DataTypes.STRING,
-      primaryKey: true,
-    },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    teamId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-    },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-    },
-    joinDate: {
-      type: DataTypes.DATE,
-      defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
-    },
-  });
-  
-  const Team = sequelize.define('Team', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    ownerId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-    },
-    joinDate: {
-      type: DataTypes.DATE,
-      defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
-    },
-  });
-  
-  const GameState = sequelize.define('GameState', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    state: {
-      type: DataTypes.ENUM('lobby', 'active', 'ended'),
-      defaultValue: 'lobby',
-    },
-  });
-  
-  const TargetAssignment = sequelize.define('TargetAssignment', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    gameId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    assassinTeamId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    targetTeamId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-  });
+let config;
+let db;
 
-  const Assassination = sequelize.define('Assassination', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    gameId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    assassinTeamId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    targetTeamId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    timestamp: {
-      type: DataTypes.DATE,
-      defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
-    },
-  });
-
-const AssassinationAttempt = sequelize.define('AssassinationAttempt', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-  gameId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  assassinTeamId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  evidenceUrl: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-  },
+client.once('ready', () => {
+  console.log('Assassin Bot is ready!');
+  config = yaml.parse(fs.readFileSync('config.yml', 'utf8'));
+  db = new sqlite3.Database('assassin.db');
+  initializeDatabase();
 });
 
-// Define associations
-Player.belongsTo(Team, { foreignKey: 'teamId' });
-Team.hasMany(Player, { foreignKey: 'teamId' });
+function initializeDatabase() {
+  db.run(`CREATE TABLE IF NOT EXISTS players (
+    id INTEGER PRIMARY KEY,
+    discord_id TEXT UNIQUE,
+    name TEXT,
+    team_id INTEGER,
+    is_alive BOOLEAN DEFAULT 1,
+    FOREIGN KEY (team_id) REFERENCES teams (id)
+  )`);
 
-// Set up the Discord client
-const client = new Discord.Client({
-  intents: [Discord.GatewayIntentBits.Guilds, Discord.GatewayIntentBits.GuildMessages, Discord.GatewayIntentBits.GuildMembers],
-});
-const MessageActionRow = Discord.MessageActionRow;
-const MessageButton = Discord.MessageButton;
-const MessageEmbed = Discord.MessageEmbed;
-const Modal = Discord.Modal;
-const interaction = Discord.BaseCommandInteraction;
+  db.run(`CREATE TABLE IF NOT EXISTS teams (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    owner_id INTEGER,
+    target_id INTEGER,
+    FOREIGN KEY (owner_id) REFERENCES players (id),
+    FOREIGN KEY (target_id) REFERENCES teams (id)
+  )`);
 
-// Event listener for when the bot is ready
-client.on('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}`);
-  
-    // Register slash commands
-    const commandGuild = client.guilds.cache.get(config.bot.guild);
-    await commandGuild.commands.set([
-      {
-        name: 'join',
-        description: 'Join the game',
-      },
-      {
-        name: 'start',
-        description: 'Start the game',
-      },
-      {
-        name: 'end',
-        description: 'End the game',
-      },
-      {
-        name: 'report',
-        description: 'Report an assassination attempt',
-      },
-      {
-        name: 'leaderboard',
-        description: 'Show the leaderboard',
-      },
-      {
-        name: 'announce',
-        description: 'Make an announcement',
-        options: [
-          {
-            name: 'message',
-            type: 'STRING',
-            description: 'The announcement message',
-            required: true,
-          },
-        ],
-      },
-    ]);
-  });
+  db.run(`CREATE TABLE IF NOT EXISTS kills (
+    id INTEGER PRIMARY KEY,
+    assassin_id INTEGER,
+    target_id INTEGER,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (assassin_id) REFERENCES players (id),
+    FOREIGN KEY (target_id) REFERENCES players (id)
+  )`);
+}
 
-// Event listener for handling commands
 client.on('interactionCreate', async (interaction) => {
-    try {
-      if (!interaction.isButton() && !interaction.isCommand()) return;
+    if (!interaction.isCommand()) return;
   
-      const player = await Player.findOne({ where: { id: interaction.user.id } });
+    const { commandName } = interaction;
   
-      if (interaction.commandName === 'join') {
-        // Check if the game is in the lobby state
-        const gameState = await GameState.findOne();
-        if (gameState.state !== 'lobby') {
-          await interaction.reply('Registration is only allowed during the lobby phase.');
-          return;
-        }
-  
-        // Check if the player is already registered
-        if (player) {
-          await interaction.reply('You are already registered.');
-          return;
-        }
-  
-        // Prompt the player to choose between creating a team or joining an existing one
-        const teamOptions = new MessageEmbed()
-          .setTitle('Team Options')
-          .setDescription('Please choose an option:')
-          .addField('1. Create a new team', 'Select this option to create a new team.')
-          .addField('2. Join an existing team', 'Select this option to join an existing team.');
-  
-        const teamOptionsMessage = await interaction.user.send({ embeds: [teamOptions] });
-        await teamOptionsMessage.react('1️⃣');
-        await teamOptionsMessage.react('2️⃣');
-  
-        const reactionFilter = (reaction, user) => {
-          return ['1️⃣', '2️⃣'].includes(reaction.emoji.name) && user.id === interaction.user.id;
-        };
-  
-        const teamChoice = await teamOptionsMessage.awaitReactions({ filter: reactionFilter, max: 1, time: 60000, errors: ['time'] })
-          .then(collected => {
-            const reaction = collected.first();
-            return reaction.emoji.name;
-          })
-          .catch(async () => {
-            await interaction.user.send('Team selection timed out. Please try again.');
-            return null;
-          });
-  
-        if (!teamChoice) {
-          await interaction.reply('Registration canceled.');
-          return;
-        }
-  
-        if (teamChoice === '1️⃣') {
-          // Prompt the player to enter a team name
-          await interaction.user.send('Please enter a team name:');
-          const messageFilter = (m) => m.author.id === interaction.user.id;
-          const teamNameMessage = await interaction.user.dmChannel.awaitMessages({ filter: messageFilter, max: 1, time: 60000, errors: ['time'] })
-            .then(collected => {
-              return collected.first();
-            })
-            .catch(async () => {
-              await interaction.user.send('Team name selection timed out. Please try again.');
-              return null;
-            });
-  
-          if (!teamNameMessage) {
-            await interaction.reply('Registration canceled.');
-            return;
-          }
-  
-          const teamName = teamNameMessage.content;
-          const existingTeam = await Team.findOne({ where: { name: teamName } });
-  
-          if (existingTeam) {
-            await interaction.user.send('A team with that name already exists. Please choose a different name.');
-            await interaction.reply('Registration failed. Team name already exists.');
-            return;
-          }
-  
-          // Create a new team and assign the player as the owner
-          const newTeam = await Team.create({ name: teamName, ownerId: interaction.user.id });
-          await Player.create({ id: interaction.user.id, name: interaction.user.username, teamId: newTeam.id });
-          await interaction.user.send(`Team "${teamName}" has been created successfully. You are the team owner.`);
-          await interaction.reply('Registration successful. Team created.');
-        } else if (teamChoice === '2️⃣') {
-          // Fetch the list of available teams
-          const teams = await Team.findAll({ where: { isActive: true } });
-          if (teams.length === 0) {
-            await interaction.user.send('There are no teams available to join at the moment.');
-            await interaction.reply('Registration failed. No teams available.');
-            return;
-          }
-  
-          const teamOptions = teams.map((team, index) => `${index + 1}. ${team.name}`).join('\n');
-          const teamSelectionEmbed = new MessageEmbed()
-            .setTitle('Team Selection')
-            .setDescription(`Please select a team to join:\n\n${teamOptions}`);
-  
-          await interaction.user.send({ embeds: [teamSelectionEmbed] });
-  
-          const selectionFilter = (m) => m.author.id === interaction.user.id && !isNaN(parseInt(m.content));
-          const teamSelectionMessage = await interaction.user.dmChannel.awaitMessages({ filter: selectionFilter, max: 1, time: 60000, errors: ['time'] })
-            .then(collected => {
-              return collected.first();
-            })
-            .catch(async () => {
-              await interaction.user.send('Team selection timed out. Please try again.');
-              return null;
-            });
-  
-          if (!teamSelectionMessage) {
-            await interaction.reply('Registration canceled.');
-            return;
-          }
-  
-          const selectedTeamIndex = parseInt(teamSelectionMessage.content) - 1;
-          if (selectedTeamIndex < 0 || selectedTeamIndex >= teams.length) {
-            await interaction.user.send('Invalid team selection. Please try again.');
-            await interaction.reply('Registration failed. Invalid team selection.');
-            return;
-          }
-  
-          const selectedTeam = teams[selectedTeamIndex];
-  
-          // Send a join request to the team owner
-          const owner = await client.users.fetch(selectedTeam.ownerId);
-          const joinEmbed = new MessageEmbed()
-            .setTitle('Team Join Request')
-            .setDescription(`${interaction.user.username} has requested to join your team "${selectedTeam.name}".`)
-            .setFooter('This request will expire in 24 hours.');
-  
-          const joinRow = new MessageActionRow().addComponents(
-            new MessageButton()
-              .setCustomId('approve_join')
-              .setLabel('Approve')
-              .setStyle('SUCCESS'),
-            new MessageButton()
-              .setCustomId('reject_join')
-              .setLabel('Reject')
-              .setStyle('DANGER')
-          );
-  
-          const joinMessage = await owner.send({ embeds: [joinEmbed], components: [joinRow] });
-  
-          const buttonFilter = (i) => i.customId === 'approve_join' || i.customId === 'reject_join';
-          const collector = joinMessage.createMessageComponentCollector({ filter: buttonFilter, max: 1, time: config.game.join_request_timeout });
-  
-          collector.on('collect', async (i) => {
-            if (i.customId === 'approve_join') {
-              const playerCount = await Player.count({ where: { teamId: selectedTeam.id } });
-              if (playerCount >= config.game.max_players_per_team) {
-                await interaction.user.send('The selected team has reached the maximum number of players.');
-                await i.update({ content: 'Join request rejected. Team is full.', components: [] });
-                await interaction.reply('Registration failed. Selected team is full.');
-              } else {
-                await Player.create({ id: interaction.user.id, name: interaction.user.username, teamId: selectedTeam.id });
-                await interaction.user.send(`Your join request for team "${selectedTeam.name}" has been approved.`);
-                await i.update({ content: 'Join request approved.', components: [] });
-                await interaction.reply('Registration successful. Joined team.');
-              }
-            } else if (i.customId === 'reject_join') {
-              await interaction.user.send(`Your join request for team "${selectedTeam.name}" has been rejected.`);
-              await i.update({ content: 'Join request rejected.', components: [] });
-              await interaction.reply('Registration failed. Join request rejected.');
-            }
-          });
-  
-          collector.on('end', async (collected, reason) => {
-            if (reason === 'time') {
-              await interaction.user.send(`Your join request for team "${selectedTeam.name}" has expired.`);
-              await joinMessage.edit({ content: 'Join request expired.', components: [] });
-              await interaction.reply('Registration failed. Join request expired.');
-            }
-          });
-        }
-      } else if (interaction.commandName === 'start') {
-        // Check if the user has the game manager role
-        const gameManagerRole = interaction.guild.roles.cache.get(config.game_manager.role_id);
-        if (!interaction.member.roles.cache.has(gameManagerRole.id)) {
-            await interaction.reply('Only game managers can start the game.');
-            return;
-        }
-  
-        // Check if the game is already active
-        const gameState = await GameState.findOne();
-        if (gameState.state === 'active') {
-          await interaction.reply('The game is already active.');
-          return;
-        }
-  
-        // Update the game state to active
-        await gameState.update({ state: 'active' });
-  
-        // Assign initial targets
-        await assignTargets();
-  
-        logEvent('Game Started', `Game ID: ${gameState.id}`);
-  
-        await interaction.reply('The game has been started and initial targets have been assigned!');
-      } else if (interaction.commandName === 'end') {
-        // Check if the user has the game manager role
-        const gameManagerRole = interaction.guild.roles.cache.get(config.game_manager.role_id);
-        if (!interaction.member.roles.cache.has(gameManagerRole.id)) {
-            await interaction.reply('Only game managers can end the game.');
-            return;
-        }
-  
-        // Check if the game is already ended
-        const gameState = await GameState.findOne();
-        if (gameState.state === 'ended') {
-          await interaction.reply('The game has already ended.');
-          return;
-        }
-  
-        // Update the game state to ended
-        await gameState.update({ state: 'ended' });
-  
-        logEvent('Game Ended', `Game ID: ${gameState.id}`);
-  
-        await interaction.reply('The game has been ended!');
-      } else if (interaction.commandName === 'report') {
-        // Check if the player is in an active team
-        const player = await Player.findOne({ where: { id: interaction.user.id } });
-        if (!player || !player.teamId) {
-          await interaction.reply('You must be in an active team to report an assassination.');
-          return;
-        }
-  
-        // Check if the game is in the active state
-        const gameState = await GameState.findOne();
-        if (gameState.state !== 'active') {
-          await interaction.reply('Assassinations can only be reported during an active game.');
-          return;
-        }
-  
-        // Prompt the player to provide evidence and description
-        const evidenceModal = new Modal()
-          .setCustomId('assassination_evidence')
-          .setTitle('Assassination Evidence')
-          .addComponents(
-            new MessageActionRow().addComponents(
-              new TextInputComponent()
-                .setCustomId('evidence_url')
-                .setLabel('Evidence URL')
-                .setStyle('SHORT')
-                .setPlaceholder('Enter the URL of the evidence image')
-                .setRequired(true)
-            ),
-            new MessageActionRow().addComponents(
-              new TextInputComponent()
-                .setCustomId('description')
-                .setLabel('Description')
-                .setStyle('PARAGRAPH')
-                .setPlaceholder('Describe the assassination attempt')
-                .setRequired(true)
-            )
-          );
-  
-        await interaction.showModal(evidenceModal);
-      } else if (interaction.customId === 'assassination_evidence') {
-        const evidenceUrl = interaction.fields.getTextInputValue('evidence_url');
-        const description = interaction.fields.getTextInputValue('description');
-  
-        // Store the reported assassination attempt in the database
-        const assassinationAttempt = await AssassinationAttempt.create({
-          gameId: gameState.id,
-          assassinTeamId: player.teamId,
-          evidenceUrl: evidenceUrl,
-          description: description,
-        });
-  
-        logEvent('Assassination Attempt Reported', `Attempt ID: ${assassinationAttempt.id}`);
-  
-        await interaction.reply('Assassination attempt reported successfully!');
-  
-        // Send a notification to the game managers' channel
-        const gameManagerChannel = interaction.guild.channels.cache.get(config.game_manager.channel_id);
-        const attemptEmbed = new MessageEmbed()
-          .setTitle('New Assassination Attempt')
-          .setDescription(`Assassin Team: ${player.team.name}\nEvidence: ${evidenceUrl}\nDescription: ${description}`)
-          .setFooter(`Attempt ID: ${assassinationAttempt.id}`);
-  
-        const validationRow = new MessageActionRow().addComponents(
-          new MessageButton()
-            .setCustomId('validate_attempt')
-            .setLabel('Validate')   
-            .setStyle('SUCCESS'),
-          new MessageButton()
-            .setCustomId('reject_attempt')
-            .setLabel('Reject')
-            .setStyle('DANGER')
-        );
-  
-        await gameManagerChannel.send({ embeds: [attemptEmbed], components: [validationRow] });
-      } else if (interaction.customId === 'validate_attempt' || interaction.customId === 'reject_attempt') {
-        // Check if the user has the game manager role
-        const gameManagerRole = interaction.guild.roles.cache.get(config.game_manager.role_id);
-        if (!interaction.member.roles.cache.has(gameManagerRole.id)) {
-          await interaction.reply('Only game managers can validate assassination attempts.');
-          return;
-        }
-  
-        const attemptId = interaction.message.embeds[0].footer.text.split(':')[1].trim();
-        const attempt = await AssassinationAttempt.findOne({ where: { id: attemptId } });
-  
-        if (!attempt) {
-          await interaction.reply('Invalid assassination attempt.');
-          return;
-        }
-  
-        if (interaction.customId === 'validate_attempt') {
-          // Update the game state and player/team status
-          const assassinTeam = await Team.findOne({ where: { id: attempt.assassinTeamId } });
-          const targetTeam = await Team.findOne({ where: { id: assassinTeam.targetTeamId } });
-  
-          await targetTeam.update({ isActive: false });
-          await Player.update({ isActive: false }, { where: { teamId: targetTeam.id } });
-  
-          await Assassination.create({
-            gameId: attempt.gameId,
-            assassinTeamId: assassinTeam.id,
-            targetTeamId: targetTeam.id,
-          });
-  
-          await attempt.destroy();
-  
-          logEvent('Assassination Attempt Validated', `Attempt ID: ${attempt.id}`);
-  
-          await interaction.update({ content: 'Assassination attempt validated!', components: [] });
-  
-          // Assign new targets
-          await assignTargets();
-  
-          // Update the leaderboard message
-          const leaderboardMessage = await gameManagerChannel.messages.fetch(config.game_manager.leaderboard_message_id);
-          const updatedLeaderboardEmbed = await generateLeaderboardEmbed();
-          await leaderboardMessage.edit({ embeds: [updatedLeaderboardEmbed] });
-        } else if (interaction.customId === 'reject_attempt') {
-          await attempt.destroy();
-  
-          logEvent('Assassination Attempt Rejected', `Attempt ID: ${attempt.id}`);
-  
-          await interaction.update({ content: 'Assassination attempt rejected.', components: [] });
-        }
-      } else if (interaction.commandName === 'leaderboard') {
-        // Check if the game is in the active state
-        const gameState = await GameState.findOne();
-        if (gameState.state !== 'active') {
-          await interaction.reply('The leaderboard is only available during an active game.');
-          return;
-        }
-  
-        const leaderboardEmbed = await generateLeaderboardEmbed();
-        await interaction.reply({ embeds: [leaderboardEmbed] });
-      } else if (interaction.commandName === 'announce') {
-        // Check if the user has the game manager role
-        const gameManagerRole = interaction.guild.roles.cache.get(config.game_manager.role_id);
-        if (!interaction.member.roles.cache.has(gameManagerRole.id)) {
-          await interaction.reply('Only game managers can make announcements.');
-          return;
-        }
-  
-        const announcementChannel = interaction.guild.channels.cache.get(config.game.announcement_channel_id);
-        const announcementMessage = interaction.options.getString('message');
-  
-        await announcementChannel.send(announcementMessage);
-  
-        logEvent('Announcement Made', `Message: ${announcementMessage}`);
-  
-        await interaction.reply('Announcement sent successfully!');
-      }
-    } catch (error) {
-      console.error('Error handling interaction:', error);
-      await interaction.reply('An error occurred while processing your request. Please try again later.');
+    if (commandName === 'join') {
+      await handlePlayerRegistration(interaction);
+    } else if (commandName === 'create-team') {
+      await handleTeamCreation(interaction);
+    } else if (commandName === 'join-team') {
+      await handleTeamJoining(interaction);
+    } else if (commandName === 'leave-team') {
+      await handleTeamLeaving(interaction);
+    } else if (commandName === 'transfer-ownership') {
+      await handleOwnershipTransfer(interaction);
+    } else if (commandName === 'kick-player') {
+      await handlePlayerKick(interaction);
+    } else if (commandName === 'start-game') {
+      await handleGameStart(interaction);
+    } else if (commandName === 'report-assassination') {
+      await handleAssassinationReport(interaction);
+    } else if (commandName === 'submit-dispute') {
+      await handleDisputeSubmission(interaction);
+    } else if (commandName === 'resolve-dispute') {
+      await handleDisputeResolution(interaction);
+    } else if (commandName === 'leaderboard') {
+      await displayLeaderboard(interaction);
+    } else if (commandName === 'rules') {
+      await displayRules(interaction);
+    } else if (commandName === 'player-list') {
+      await displayPlayerList(interaction);
+    } else if (commandName === 'help') {
+      await displayHelp(interaction);
     }
   });
-
-// Event listener for handling errors
-client.on('error', (error) => {
-  console.error('Bot encountered an error:', error);
-});
-
-// Event listener for handling unhandled promise rejections
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled promise rejection:', error);
-});
-
-// Function to assign targets
-async function assignTargets() {
-    try {
-      // Check if the game is in the active state
-      const gameState = await GameState.findOne();
-      if (gameState.state !== 'active') {
-        return;
+  
+  async function handlePlayerRegistration(interaction) {
+    const userId = interaction.user.id;
+  
+    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, row) => {
+      if (err) {
+        console.error('Error checking player registration:', err);
+        return interaction.reply('An error occurred while registering. Please try again later.');
       }
   
-      // Fetch all active teams
-      const teams = await Team.findAll({ where: { isActive: true } });
-      if (teams.length < 2) {
-        return;
+      if (row) {
+        return interaction.reply('You are already registered for the game.');
       }
   
-      // Clear existing target assignments
-      await TargetAssignment.destroy({ where: {} });
+      const name = interaction.user.username;
   
-      // Create a new array to store the target assignments
-      const targetAssignments = [];
-  
-      // Assign targets based on the chain methodology
-      for (let i = 0; i < teams.length; i++) {
-        const assassinTeam = teams[i];
-        const targetTeam = teams[(i + 1) % teams.length];
-  
-        // Store the target assignment in the array
-        targetAssignments.push({
-          gameId: gameState.id,
-          assassinTeamId: assassinTeam.id,
-          targetTeamId: targetTeam.id,
-        });
-      }
-  
-      // Bulk create the target assignments in the database
-      await TargetAssignment.bulkCreate(targetAssignments);
-  
-      // Send private messages to each team with their assigned target
-      for (const assignment of targetAssignments) {
-        const assassinTeamMembers = await Player.findAll({ where: { teamId: assignment.assassinTeamId } });
-        const targetTeam = await Team.findOne({ where: { id: assignment.targetTeamId } });
-  
-        for (const member of assassinTeamMembers) {
-          const user = await client.users.fetch(member.id);
-          await user.send(`Your team's new target is: ${targetTeam.name}`);
+      db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId, name], (err) => {
+        if (err) {
+          console.error('Error registering player:', err);
+          return interaction.reply('An error occurred while registering. Please try again later.');
         }
-      }
   
-      // Send a global notification about target assignments
-      await sendNotification(config.game.notification_channel_id, 'New targets have been assigned to all teams!');
-  
-      logEvent('Targets Assigned', `Game ID: ${gameState.id}`);
-    } catch (error) {
-      console.error('Error assigning targets:', error);
-    }
-}
-
-// Function to send notifications
-async function sendNotification(channelId, message) {
-  const channel = await client.channels.fetch(channelId);
-  await channel.send(message);
-}
-
-// Function to log important events
-function logEvent(event, details) {
-  console.log(`[${new Date().toISOString()}] ${event}: ${details}`);
-}
-
-// Function to generate the leaderboard embed
-async function generateLeaderboardEmbed() {
-    try {
-      // Fetch the leaderboard data from the database
-      const leaderboard = await Team.findAll({
-        where: { isActive: true },
-        attributes: ['name'],
-        include: [
-          {
-            model: Assassination,
-            attributes: [
-              [sequelize.fn('COUNT', sequelize.col('Assassinations.id')), 'assassinationCount'],
-            ],
-          },
-        ],
-        group: ['Team.id'],
-        order: [[sequelize.literal('assassinationCount'), 'DESC']],
+        interaction.reply('You have been successfully registered for the game!');
       });
+    });
+  }
   
-      // Generate the leaderboard embed
-      const leaderboardEmbed = new MessageEmbed()
-        .setTitle('Leaderboard')
-        .setDescription('Current standings of the teams:');
+  async function handleTeamCreation(interaction) {
+    const userId = interaction.user.id;
   
-      for (const [index, entry] of leaderboard.entries()) {
-        leaderboardEmbed.addField(
-          `${index + 1}. ${entry.name}`,
-          `Assassinations: ${entry.Assassinations.length}`
-        );
+    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, row) => {
+      if (err) {
+        console.error('Error checking player:', err);
+        return interaction.reply('An error occurred while creating a team. Please try again later.');
       }
   
-      return leaderboardEmbed;
-    } catch (error) {
-      console.error('Error generating leaderboard:', error);
-      return new MessageEmbed()
-        .setTitle('Leaderboard')
-        .setDescription('An error occurred while generating the leaderboard.');
+      if (!row) {
+        return interaction.reply('You must be registered for the game to create a team.');
+      }
+  
+      const teamName = interaction.options.getString('name');
+  
+      db.run('INSERT INTO teams (name, owner_id) VALUES (?, ?)', [teamName, row.id], function(err) {
+        if (err) {
+          console.error('Error creating team:', err);
+          return interaction.reply('An error occurred while creating a team. Please try again later.');
+        }
+  
+        const teamId = this.lastID;
+  
+        db.run('UPDATE players SET team_id = ? WHERE id = ?', [teamId, row.id], (err) => {
+          if (err) {
+            console.error('Error updating player team:', err);
+            return interaction.reply('An error occurred while creating a team. Please try again later.');
+          }
+  
+          interaction.reply(`Team "${teamName}" has been created and you have been added as the owner!`);
+        });
+      });
+    });
+  }
+  
+  async function handleTeamJoining(interaction) {
+    const userId = interaction.user.id;
+    const teamId = interaction.options.getInteger('team');
+  
+    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+      if (err) {
+        console.error('Error checking player:', err);
+        return interaction.reply('An error occurred while joining a team. Please try again later.');
+      }
+  
+      if (!playerRow) {
+        return interaction.reply('You must be registered for the game to join a team.');
+      }
+  
+      db.get('SELECT * FROM teams WHERE id = ?', [teamId], (err, teamRow) => {
+        if (err) {
+          console.error('Error checking team:', err);
+          return interaction.reply('An error occurred while joining a team. Please try again later.');
+        }
+  
+        if (!teamRow) {
+          return interaction.reply('The specified team does not exist.');
+        }
+  
+        if (playerRow.team_id) {
+          return interaction.reply('You are already a member of a team.');
+        }
+  
+        const ownerId = teamRow.owner_id;
+  
+        interaction.reply(`Your request to join team "${teamRow.name}" has been sent to the team owner.`);
+  
+        // Send a join request message to the team owner
+        client.users.fetch(ownerId)
+          .then((owner) => {
+            const embed = new MessageEmbed()
+              .setTitle('Team Join Request')
+              .setDescription(`${interaction.user.username} has requested to join your team "${teamRow.name}".`)
+              .setFooter('Please use the buttons below to approve or reject the request.');
+  
+            const approveButton = {
+              type: 2,
+              style: 3,
+              label: 'Approve',
+              custom_id: `approve_join_${playerRow.id}_${teamId}`,
+            };
+  
+            const rejectButton = {
+              type: 2,
+              style: 4,
+              label: 'Reject',
+              custom_id: `reject_join_${playerRow.id}_${teamId}`,
+            };
+  
+            const actionRow = {
+              type: 1,
+              components: [approveButton, rejectButton],
+            };
+  
+            owner.send({ embeds: [embed], components: [actionRow] });
+          })
+          .catch((err) => {
+            console.error('Error sending join request to team owner:', err);
+            interaction.followUp('An error occurred while sending the join request to the team owner. Please try again later.');
+          });
+      });
+    });
+  }
+  
+  client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isButton()) return;
+  
+    const [action, playerId, teamId] = interaction.customId.split('_');
+  
+    if (action === 'approve') {
+      db.run('UPDATE players SET team_id = ? WHERE id = ?', [teamId, playerId], (err) => {
+        if (err) {
+          console.error('Error updating player team:', err);
+          return interaction.reply('An error occurred while approving the join request. Please try again later.');
+        }
+  
+        interaction.reply(`Player has been added to your team!`);
+  
+        client.users.fetch(playerId)
+          .then((player) => {
+            player.send(`Your request to join the team has been approved!`);
+          })
+          .catch((err) => {
+            console.error('Error sending approval message to player:', err);
+          });
+      });
+    } else if (action === 'reject') {
+      interaction.reply(`Join request has been rejected.`);
+  
+      client.users.fetch(playerId)
+        .then((player) => {
+          player.send(`Your request to join the team has been rejected.`);
+        })
+        .catch((err) => {
+          console.error('Error sending rejection message to player:', err);
+        });
     }
+  });
+  
+  async function handleTeamLeaving(interaction) {
+    const userId = interaction.user.id;
+  
+    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+      if (err) {
+        console.error('Error checking player:', err);
+        return interaction.reply('An error occurred while leaving the team. Please try again later.');
+      }
+  
+      if (!playerRow) {
+        return interaction.reply('You are not registered for the game.');
+      }
+  
+      if (!playerRow.team_id) {
+        return interaction.reply('You are not a member of any team.');
+      }
+  
+      const teamId = playerRow.team_id;
+  
+      db.get('SELECT * FROM teams WHERE id = ?', [teamId], (err, teamRow) => {
+        if (err) {
+          console.error('Error checking team:', err);
+          return interaction.reply('An error occurred while leaving the team. Please try again later.');
+        }
+  
+        if (!teamRow) {
+          return interaction.reply('The specified team does not exist.');
+        }
+  
+        if (teamRow.owner_id === playerRow.id) {
+          // If the player is the team owner, transfer ownership to the next oldest member
+          db.get('SELECT * FROM players WHERE team_id = ? AND id != ? ORDER BY id LIMIT 1', [teamId, playerRow.id], (err, newOwnerRow) => {
+            if (err) {
+              console.error('Error finding new team owner:', err);
+              return interaction.reply('An error occurred while leaving the team. Please try again later.');
+            }
+  
+            if (newOwnerRow) {
+              db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [newOwnerRow.id, teamId], (err) => {
+                if (err) {
+                  console.error('Error updating team owner:', err);
+                  return interaction.reply('An error occurred while leaving the team. Please try again later.');
+                }
+  
+                interaction.reply(`You have left the team and ownership has been transferred to ${newOwnerRow.name}.`);
+  
+                db.run('UPDATE players SET team_id = NULL WHERE id = ?', [playerRow.id], (err) => {
+                  if (err) {
+                    console.error('Error removing player from team:', err);
+                  }
+                });
+              });
+            } else {
+              // If there are no other team members, delete the team
+              db.run('DELETE FROM teams WHERE id = ?', [teamId], (err) => {
+                if (err) {
+                  console.error('Error deleting team:', err);
+                  return interaction.reply('An error occurred while leaving the team. Please try again later.');
+                }
+  
+                interaction.reply(`You have left the team and the team has been disbanded.`);
+  
+                db.run('UPDATE players SET team_id = NULL WHERE id = ?', [playerRow.id], (err) => {
+                  if (err) {
+                    console.error('Error removing player from team:', err);
+                  }
+                });
+              });
+            }
+          });
+        } else {
+          // If the player is not the team owner, simply remove them from the team
+          db.run('UPDATE players SET team_id = NULL WHERE id = ?', [playerRow.id], (err) => {
+            if (err) {
+              console.error('Error removing player from team:', err);
+              return interaction.reply('An error occurred while leaving the team. Please try again later.');
+            }
+  
+            interaction.reply(`You have left the team.`);
+          });
+        }
+      });
+    });
+  }
+  
+  async function handleOwnershipTransfer(interaction) {
+    const userId = interaction.user.id;
+    const newOwnerId = interaction.options.getUser('player').id;
+  
+    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+      if (err) {
+        console.error('Error checking player:', err);
+        return interaction.reply('An error occurred while transferring ownership. Please try again later.');
+      }
+  
+      if (!playerRow) {
+        return interaction.reply('You are not registered for the game.');
+      }
+  
+      if (!playerRow.team_id) {
+        return interaction.reply('You are not a member of any team.');
+      }
+  
+      const teamId = playerRow.team_id;
+  
+      db.get('SELECT * FROM teams WHERE id = ?', [teamId], (err, teamRow) => {
+        if (err) {
+          console.error('Error checking team:', err);
+          return interaction.reply('An error occurred while transferring ownership. Please try again later.');
+        }
+  
+        if (!teamRow) {
+          return interaction.reply('The specified team does not exist.');
+        }
+  
+        if (teamRow.owner_id !== playerRow.id) {
+          return interaction.reply('You must be the team owner to transfer ownership.');
+        }
+  
+        db.get('SELECT * FROM players WHERE discord_id = ? AND team_id = ?', [newOwnerId, teamId], (err, newOwnerRow) => {
+          if (err) {
+            console.error('Error checking new owner:', err);
+            return interaction.reply('An error occurred while transferring ownership. Please try again later.');
+          }
+  
+          if (!newOwnerRow) {
+            return interaction.reply('The specified player is not a member of your team.');
+          }
+  
+          db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [newOwnerRow.id, teamId], (err) => {
+            if (err) {
+              console.error('Error updating team owner:', err);
+              return interaction.reply('An error occurred while transferring ownership. Please try again later.');
+            }
+  
+            interaction.reply(`Team ownership has been transferred to ${newOwnerRow.name}.`);
+          });
+        });
+      });
+    });
+  }
+  
+  async function handlePlayerKick(interaction) {
+    const userId = interaction.user.id;
+    const playerId = interaction.options.getUser('player').id;
+  
+    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+      if (err) {
+        console.error('Error checking player:', err);
+        return interaction.reply('An error occurred while kicking the player. Please try again later.');
+      }
+  
+      if (!playerRow) {
+        return interaction.reply('You are not registered for the game.');
+      }
+  
+      if (!playerRow.team_id) {
+        return interaction.reply('You are not a member of any team.');
+      }
+  
+      const teamId = playerRow.team_id;
+  
+      db.get('SELECT * FROM teams WHERE id = ?', [teamId], (err, teamRow) => {
+        if (err) {
+          console.error('Error checking team:', err);
+          return interaction.reply('An error occurred while kicking the player. Please try again later.');
+        }
+  
+        if (!teamRow) {
+          return interaction.reply('The specified team does not exist.');
+        }
+  
+        if (teamRow.owner_id !== playerRow.id) {
+          return interaction.reply('You must be the team owner to kick players.');
+        }
+  
+        db.get('SELECT * FROM players WHERE discord_id = ? AND team_id = ?', [playerId, teamId], (err, kickedPlayerRow) => {
+          if (err) {
+            console.error('Error checking kicked player:', err);
+            return interaction.reply('An error occurred while kicking the player. Please try again later.');
+          }
+  
+          if (!kickedPlayerRow) {
+            return interaction.reply('The specified player is not a member of your team.');
+          }
+  
+          db.run('UPDATE players SET team_id = NULL WHERE id = ?', [kickedPlayerRow.id], (err) => {
+            if (err) {
+              console.error('Error kicking player:', err);
+              return interaction.reply('An error occurred while kicking the player. Please try again later.');
+            }
+            interaction.reply(`${kickedPlayerRow.name} has been kicked from the team.`);
+        });
+      });
+    });
+  });
 }
 
-// Sync the database and start the bot
-sequelize.sync()
-  .then(() => {
-    console.log('Database synced successfully.');
-    client.login(config.bot.token);
-  })
-  .catch((error) => {
-    console.error('Error syncing database:', error);
+async function handleGameStart(interaction) {
+  const userId = interaction.user.id;
+
+  db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+    if (err) {
+      console.error('Error checking player:', err);
+      return interaction.reply('An error occurred while starting the game. Please try again later.');
+    }
+
+    if (!playerRow || playerRow.is_admin !== 1) {
+      return interaction.reply('You must be an admin to start the game.');
+    }
+
+    db.all('SELECT COUNT(*) as count FROM teams', (err, rows) => {
+      if (err) {
+        console.error('Error counting teams:', err);
+        return interaction.reply('An error occurred while starting the game. Please try again later.');
+      }
+
+      const teamCount = rows[0].count;
+
+      if (teamCount < config.game.min_team_count) {
+        return interaction.reply(`A minimum of ${config.game.min_team_count} teams is required to start the game.`);
+      }
+
+      db.run('UPDATE game_state SET state = ?', ['active'], (err) => {
+        if (err) {
+          console.error('Error updating game state:', err);
+          return interaction.reply('An error occurred while starting the game. Please try again later.');
+        }
+
+        assignTargets();
+        startGameLoop();
+
+        interaction.reply('The game has been started!');
+      });
+    });
   });
+}
+
+async function handleAssassinationReport(interaction) {
+  const channel = interaction.channel;
+  const assassinId = interaction.user.id;
+  const targetId = interaction.options.getInteger('target');
+  const evidenceImage = interaction.options.getAttachment('evidence');
+
+  db.get('SELECT * FROM players WHERE discord_id = ?', [assassinId], (err, assassinRow) => {
+    if (err) {
+      console.error('Error checking assassin:', err);
+      return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
+    }
+
+    if (!assassinRow || !assassinRow.is_alive) {
+      return interaction.reply('You must be an alive player to report an assassination.');
+    }
+
+    db.get('SELECT * FROM players WHERE id = ?', [targetId], (err, targetRow) => {
+      if (err) {
+        console.error('Error checking target:', err);
+        return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
+      }
+
+      if (!targetRow || !targetRow.is_alive) {
+        return interaction.reply('The specified target is not an alive player.');
+      }
+
+      const embed = new MessageEmbed()
+        .setTitle('Assassination Report')
+        .setDescription(`Assassin: ${interaction.user.username}\nTarget: ${targetRow.name}`)
+        .setImage(evidenceImage.url)
+        .setFooter('Please vote on whether to approve or reject the assassination.');
+
+      const approveButton = {
+        type: 2,
+        style: 3,
+        label: 'Approve',
+        custom_id: `approve_assassination_${targetId}`,
+      };
+
+      const rejectButton = {
+        type: 2,
+        style: 4,
+        label: 'Reject',
+        custom_id: `reject_assassination_${targetId}`,
+      };
+
+      const actionRow = {
+        type: 1,
+        components: [approveButton, rejectButton],
+      };
+
+      channel.send({ embeds: [embed], components: [actionRow] });
+      interaction.reply('Your assassination report has been submitted for voting.');
+    });
+  });
+}
+
+async function handleDisputeSubmission(interaction) {
+  const channel = interaction.guild.channels.cache.get(config.channels.disputes);
+  const userId = interaction.user.id;
+  const dispute = interaction.options.getString('dispute');
+
+  db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+    if (err) {
+      console.error('Error checking player:', err);
+      return interaction.reply('An error occurred while submitting the dispute. Please try again later.');
+    }
+
+    if (!playerRow) {
+      return interaction.reply('You must be a registered player to submit a dispute.');
+    }
+
+    const embed = new MessageEmbed()
+      .setTitle('Dispute Submission')
+      .setDescription(`Submitted by: ${interaction.user.username}\n\n${dispute}`);
+
+    channel.send({ embeds: [embed] });
+    interaction.reply('Your dispute has been submitted for review.');
+  });
+}
+
+async function handleDisputeResolution(interaction) {
+  const channel = interaction.guild.channels.cache.get(config.channels.disputes);
+  const userId = interaction.user.id;
+  const disputeId = interaction.options.getString('dispute_id');
+  const resolution = interaction.options.getString('resolution');
+
+  db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+    if (err) {
+      console.error('Error checking player:', err);
+      return interaction.reply('An error occurred while resolving the dispute. Please try again later.');
+    }
+
+    if (!playerRow || playerRow.is_admin !== 1) {
+      return interaction.reply('You must be an admin to resolve disputes.');
+    }
+
+    channel.messages.fetch(disputeId)
+      .then((message) => {
+        const embed = new MessageEmbed()
+          .setTitle('Dispute Resolution')
+          .setDescription(`Resolved by: ${interaction.user.username}\n\n${resolution}`);
+
+        message.reply({ embeds: [embed] });
+        interaction.reply('The dispute has been resolved.');
+      })
+      .catch((err) => {
+        console.error('Error fetching dispute message:', err);
+        interaction.reply('An error occurred while resolving the dispute. Please check the dispute ID and try again.');
+      });
+  });
+}
+
+async function displayLeaderboard(interaction) {
+  const channel = interaction.guild.channels.cache.get(config.channels.leaderboard);
+
+  db.all('SELECT t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC', (err, rows) => {
+    if (err) {
+      console.error('Error fetching leaderboard data:', err);
+      return interaction.reply('An error occurred while displaying the leaderboard. Please try again later.');
+    }
+
+    let leaderboard = 'Leaderboard:\n\n';
+    rows.forEach((row, index) => {
+      leaderboard += `${index + 1}. ${row.team_name} - ${row.kills} kills\n`;
+    });
+
+    const embed = new MessageEmbed()
+      .setTitle('Assassin Game Leaderboard')
+      .setDescription(leaderboard);
+
+    channel.send({ embeds: [embed] });
+    interaction.reply('The leaderboard has been updated.');
+  });
+}
+
+async function displayRules(interaction) {
+  const rulesFile = fs.readFileSync(config.rules_file, 'utf8');
+  const embed = new MessageEmbed()
+    .setTitle('Assassin Game Rules')
+    .setDescription(rulesFile);
+
+  interaction.reply({ embeds: [embed] });
+}
+
+async function displayPlayerList(interaction) {
+  db.all('SELECT p.name, t.name AS team_name, p.is_alive FROM players p LEFT JOIN teams t ON p.team_id = t.id', (err, rows) => {
+    if (err) {
+      console.error('Error fetching player list:', err);
+      return interaction.reply('An error occurred while displaying the player list. Please try again later.');
+    }
+
+    let playerList = 'Player List:\n\n';
+    rows.forEach((row) => {
+      playerList += `${row.name} - Team: ${row.team_name || 'None'}, Status: ${row.is_alive ? 'Alive' : 'Eliminated'}\n`;
+    });
+
+    const embed = new MessageEmbed()
+      .setTitle('Assassin Game Player List')
+      .setDescription(playerList);
+
+    interaction.reply({ embeds: [embed] });
+  });
+}
+
+async function displayHelp(interaction) {
+  const helpMessage = `
+    Assassin Game Bot Commands:
+    
+    /join - Register for the game
+    /create-team <name> - Create a new team
+    /join-team <team> - Request to join a team
+    /leave-team - Leave your current team
+    /transfer-ownership <player> - Transfer team ownership to another player
+    /kick-player <player> - Kick a player from your team (team owner only)
+    /start-game - Start the game (admin only)
+    /report-assassination <target> <evidence> - Report an assassination with evidence
+    /submit-dispute <dispute> - Submit a dispute for review
+    /resolve-dispute <dispute_id> <resolution> - Resolve a dispute (admin only)
+    /leaderboard - Display the current leaderboard
+    /rules - Display the game rules
+    /player-list - Display the list of players and their status
+    /help - Display this help message
+  `;
+
+  const embed = new MessageEmbed()
+    .setTitle('Assassin Game Help')
+    .setDescription(helpMessage);
+
+  interaction.reply({ embeds: [embed] });
+}
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+
+  if (message.channel.id === config.channels.voting) {
+    if (message.attachments.size === 0) {
+      await message.delete();
+      return;
+    }
+
+    const attachment = message.attachments.first();
+    const assassination = {
+      assassin_id: message.author.id,
+      target_id: null,
+      evidence_url: attachment.url,
+    };
+
+    db.run('INSERT INTO assassinations (assassin_id, evidence_url) VALUES (?, ?)', [assassination.assassin_id, assassination.evidence_url], (err) => {
+      if (err) {
+        console.error('Error inserting assassination:', err);
+        return message.reply('An error occurred while processing the assassination. Please try again later.');
+      }
+
+      const embed = new MessageEmbed()
+        .setTitle('Assassination Evidence')
+        .setDescription(`Submitted by: ${message.author.username}`)
+        .setImage(attachment.url)
+        .setFooter('Please vote on whether to approve or reject the assassination.');
+
+      const approveButton = {
+        type: 2,
+        style: 3,
+        label: 'Approve',
+        custom_id: `approve_assassination_${message.id}`,
+      };
+
+      const rejectButton = {
+        type: 2,
+        style: 4,
+        label: 'Reject',
+        custom_id: `reject_assassination_${message.id}`,
+      };
+
+      const actionRow = {
+        type: 1,
+        components: [approveButton, rejectButton],
+      };
+
+      message.reply({ embeds: [embed], components: [actionRow] });
+    });
+  }
+});
+
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  const [action, assassinationId] = interaction.customId.split('_');
+
+  if (action === 'approve') {
+    db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
+      if (err) {
+        console.error('Error fetching assassination:', err);
+        return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+      }
+
+      if (!row) {
+        return interaction.reply('The specified assassination does not exist.');
+      }
+
+      const assassinId = row.assassin_id;
+      const targetId = row.target_id;
+
+      db.run('UPDATE players SET is_alive = 0 WHERE id = ?', [targetId], (err) => {
+        if (err) {
+          console.error('Error updating player status:', err);
+          return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+        }
+
+        db.run('INSERT INTO kills (assassin_id, target_id) VALUES (?, ?)', [assassinId, targetId], (err) => {
+          if (err) {
+            console.error('Error inserting kill:', err);
+            return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+          }
+
+          interaction.update({ content: 'The assassination has been approved.', components: [] });
+          updateLeaderboard();
+        });
+      });
+    });
+  } else if (action === 'reject') {
+    interaction.update({ content: 'The assassination has been rejected.', components: [] });
+  }
+});
+
+function updateGameState() {
+  const now = new Date();
+  const endDate = new Date(config.game.end_date);
+
+  if (now >= endDate) {
+    db.run('UPDATE game_state SET state = ?', ['ended'], (err) => {
+      if (err) {
+        console.error('Error updating game state:', err);
+        return;
+      }
+
+      db.get('SELECT t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC LIMIT 1', (err, row) => {
+        if (err) {
+          console.error('Error fetching winning team:', err);
+          return;
+        }
+
+        const channel = client.channels.cache.get(config.channels.status);
+        channel.send(`The game has ended! The winning team is ${row.team_name} with ${row.kills} kills.`);
+      });
+    });
+  }
+}
+
+function assignTargets() {
+  db.all('SELECT * FROM teams', (err, rows) => {
+    if (err) {
+      console.error('Error fetching teams:', err);
+      return;
+    }
+
+    const teamIds = rows.map((row) => row.id);
+    const shuffledTeamIds = shuffle(teamIds);
+
+    for (let i = 0; i < shuffledTeamIds.length; i++) {
+      const teamId = shuffledTeamIds[i];
+      const targetId = shuffledTeamIds[(i + 1) % shuffledTeamIds.length];
+
+      db.run('UPDATE teams SET target_id = ? WHERE id = ?', [targetId, teamId], (err) => {
+        if (err) {
+          console.error('Error updating team target:', err);
+        }
+      });
+    }
+  });
+}
+
+function updateLeaderboard() {
+  const channel = client.channels.cache.get(config.channels.leaderboard);
+
+  db.all('SELECT t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC', (err, rows) => {
+    if (err) {
+      console.error('Error fetching leaderboard data:', err);
+      return;
+    }
+
+    let leaderboard = 'Leaderboard:\n\n';
+    rows.forEach((row, index) => {
+      leaderboard += `${index + 1}. ${row.team_name} - ${row.kills} kills\n`;
+    });
+
+    const embed = new MessageEmbed()
+      .setTitle('Assassin Game Leaderboard')
+      .setDescription(leaderboard);
+
+    channel.messages.fetch({ limit: 1 })
+      .then((messages) => {
+        const lastMessage = messages.first();
+
+        if (lastMessage && lastMessage.author.id === client.user.id) {
+          lastMessage.edit({ embeds: [embed] });
+        } else {
+          channel.send({ embeds: [embed] });
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching leaderboard message:', err);
+      });
+  });
+}
+
+function startGameLoop() {
+  setInterval(() => {
+    updateGameState();
+  }, 60000);
+}
+client.login(config.bot.token);

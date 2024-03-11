@@ -13,11 +13,15 @@
   "keywords": [
     "discordbot"
   ],
-  "author": "ericsong1911",
+  "dependencies": {
+    "discord.js": "^14.0.0",
+    "yaml": "^2.0.0",
+    "sqlite3": "^5.0.0"
+  },
+  "author": "Eric Song",
   "license": "GPL-3.0",
   "bugs": {
     "url": "https://github.com/ericsong1911/SeniorAssassinDiscordBot/issues"
   },
   "homepage": "https://github.com/ericsong1911/SeniorAssassinDiscordBot#readme",
-  "type": "module"
 }

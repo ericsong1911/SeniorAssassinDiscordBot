@@ -1,25 +1,26 @@
 bot:
   token: YOUR_BOT_TOKEN
   prefix: '!'
-  guild: YOUR_GUILD_ID
 
 game:
-  min_players: 4
-  max_players: 20
-  min_teams: 2
-  max_players_per_team: 5
-  team_creation_timeout: 60000
-  join_request_timeout: 86400000
-  assassination_timeout: 1209600000
-  assassination_timeout_enabled: true
-  announcement_channel_id: ANNOUNCEMENT_CHANNEL_ID
-  notification_channel_id: NOTIFICATION_CHANNEL_ID
+  start_date: '2023-06-01T00:00:00'
+  end_date: '2023-06-30T23:59:59'
+  require_manual_approval: true
+  max_team_size: 4
+  min_team_count: 2
+  time_limit_enabled: true
+  time_limit_duration: 72 # hours
 
-game_manager:
-  role_id: GAME_MANAGER_ROLE_ID
-  channel_id: GAME_MANAGER_CHANNEL_ID
-  leaderboard_message_id: LEADERBOARD_MESSAGE_ID
+channels:
+  status: STATUS_CHANNEL_ID
+  leaderboard: LEADERBOARD_CHANNEL_ID
+  voting: VOTING_CHANNEL_ID
+  disputes: DISPUTES_CHANNEL_ID
 
-database:
-  dialect: sqlite
-  storage: assassin.sqlite
+roles:
+  game_manager: GAME_MANAGER_ROLE_ID
+
+cooldowns:
+  command_cooldown: 5 # seconds
+
+rules_file: gameRules.txt
