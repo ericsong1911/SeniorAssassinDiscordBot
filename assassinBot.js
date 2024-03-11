@@ -20,6 +20,7 @@ client.once('ready', () => {
   config = yaml.parse(fs.readFileSync('config.yml', 'utf8'));
   db = new sqlite3.Database('assassin.db');
   initializeDatabase();
+  client.login(config.bot.token);
 });
 
 function initializeDatabase() {
