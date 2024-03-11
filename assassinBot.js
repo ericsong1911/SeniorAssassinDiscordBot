@@ -68,6 +68,7 @@ const commands = [
     new SlashCommandBuilder().setName('leaderboard').setDescription('Display the current leaderboard'),
     new SlashCommandBuilder().setName('rules').setDescription('Display the game rules'),
     new SlashCommandBuilder().setName('player-list').setDescription('Display the list of players and their status'),
+    new SlashCommandBuilder().setName('team-list').setDescription('Display the list of teams and their information'),
     new SlashCommandBuilder().setName('help').setDescription('Display the help message'),
   ];
 
@@ -119,8 +120,10 @@ client.on('interactionCreate', async (interaction) => {
       await displayRules(interaction);
     } else if (commandName === 'player-list') {
       await displayPlayerList(interaction);
+    } else if (commandName === 'team-list') {
+      await displayTeamList(interaction);
     } else if (commandName === 'help') {
-      await displayHelp(interaction);
+    await displayHelp(interaction);
     }
   });
 
@@ -443,6 +446,11 @@ client.on('interactionCreate', async (interaction) => {
     const userId = interaction.user.id;
     const playerId = interaction.options.getUser('player').id;
   
+    // Check if the player is trying to kick themselves
+    if (userId === playerId) {
+      return interaction.reply('You cannot kick yourself from the team.');
+    }
+  
     db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
       if (err) {
         console.error('Error checking player:', err);
@@ -488,12 +496,13 @@ client.on('interactionCreate', async (interaction) => {
               console.error('Error kicking player:', err);
               return interaction.reply('An error occurred while kicking the player. Please try again later.');
             }
+  
             interaction.reply(`${kickedPlayerRow.name} has been kicked from the team.`);
+          });
         });
       });
     });
-  });
-}
+  }
 
 async function handleGameStart(interaction) {
   const userId = interaction.user.id;
@@ -704,32 +713,53 @@ async function displayPlayerList(interaction) {
   });
 }
 
+async function displayTeamList(interaction) {
+    db.all('SELECT t.id, t.name, p.name AS owner_name, COUNT(p2.id) AS member_count FROM teams t LEFT JOIN players p ON t.owner_id = p.id LEFT JOIN players p2 ON t.id = p2.team_id GROUP BY t.id', (err, rows) => {
+      if (err) {
+        console.error('Error fetching team list:', err);
+        return interaction.reply('An error occurred while displaying the team list. Please try again later.');
+      }
+  
+      let teamList = 'Team List:\n\n';
+      rows.forEach((row) => {
+        teamList += `ID: ${row.id} | ${row.name} - Owner: ${row.owner_name}, Members: ${row.member_count}\n`;
+      });
+  
+      const embed = new EmbedBuilder()
+        .setTitle('Assassin Game Team List')
+        .setDescription(teamList);
+  
+      interaction.reply({ embeds: [embed] });
+    });
+  }
+
 async function displayHelp(interaction) {
-  const helpMessage = `
-    Assassin Game Bot Commands:
-    
-    /join - Register for the game
-    /create-team <name> - Create a new team
-    /join-team <team> - Request to join a team
-    /leave-team - Leave your current team
-    /transfer-ownership <player> - Transfer team ownership to another player
-    /kick-player <player> - Kick a player from your team (team owner only)
-    /start-game - Start the game (admin only)
-    /report-assassination <target> <evidence> - Report an assassination with evidence
-    /submit-dispute <dispute> - Submit a dispute for review
-    /resolve-dispute <dispute_id> <resolution> - Resolve a dispute (admin only)
-    /leaderboard - Display the current leaderboard
-    /rules - Display the game rules
-    /player-list - Display the list of players and their status
-    /help - Display this help message
-  `;
-
-  const embed = new EmbedBuilder()
-    .setTitle('Assassin Game Help')
-    .setDescription(helpMessage);
-
-  interaction.reply({ embeds: [embed] });
-}
+    const helpMessage = `
+      Assassin Game Bot Commands:
+      
+      /join - Register for the game
+      /create-team <name> - Create a new team
+      /join-team <team> - Request to join a team
+      /leave-team - Leave your current team
+      /transfer-ownership <player> - Transfer team ownership to another player
+      /kick-player <player> - Kick a player from your team (team owner only)
+      /start-game - Start the game (admin only)
+      /report-assassination <target> <evidence> - Report an assassination with evidence
+      /submit-dispute <dispute> - Submit a dispute for review
+      /resolve-dispute <dispute_id> <resolution> - Resolve a dispute (admin only)
+      /leaderboard - Display the current leaderboard
+      /rules - Display the game rules
+      /player-list - Display the list of players and their status
+      /team-list - Display the list of teams and their information
+      /help - Display this help message
+    `;
+  
+    const embed = new EmbedBuilder()
+      .setTitle('Assassin Game Help')
+      .setDescription(helpMessage);
+  
+    interaction.reply({ embeds: [embed] });
+  }
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
