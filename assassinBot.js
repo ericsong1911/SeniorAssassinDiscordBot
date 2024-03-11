@@ -151,7 +151,7 @@ Team.hasMany(Player, { foreignKey: 'teamId' });
 
 // Set up the Discord client
 const client = new Client({
-  intents: [GatewayIntentBits.FLAGS.GUILDS, GatewayIntentBits.FLAGS.GUILD_MESSAGES],
+  intents: [GatewayIntentBits.GUILDS, GatewayIntentBits.GUILD_MESSAGES],
 });
 
 // Event listener for when the bot is ready
