@@ -27,7 +27,7 @@ client.once('ready', () => {
 
 function initializeDatabase() {
   db.run(`CREATE TABLE IF NOT EXISTS players (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_id TEXT UNIQUE,
     name TEXT,
     team_id INTEGER,
@@ -44,13 +44,11 @@ function initializeDatabase() {
     FOREIGN KEY (target_id) REFERENCES teams (id)
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS kills (
-    id INTEGER PRIMARY KEY,
-    assassin_id INTEGER,
-    target_id INTEGER,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (assassin_id) REFERENCES players (id),
-    FOREIGN KEY (target_id) REFERENCES players (id)
+  db.run(`CREATE TABLE IF NOT EXISTS disputes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    submitter_id TEXT,
+    dispute_text TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 }
 
@@ -155,14 +153,14 @@ client.on('interactionCreate', async (interaction) => {
       }
   
       const name = interaction.user.username;
-      const playerId = Math.random().toString(36).substring(7); // Generate a unique player ID
   
-      db.run('INSERT INTO players (id, discord_id, name) VALUES (?, ?, ?)', [playerId, userId, name], (err) => {
+      db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId, name], function(err) {
         if (err) {
           console.error('Error registering player:', err);
           return interaction.reply('An error occurred while registering. Please try again later.');
         }
   
+        const playerId = this.lastID;
         interaction.reply(`You have been successfully registered for the game! Your player ID is: ${playerId}`);
       });
     });
@@ -617,64 +615,68 @@ async function handleAssassinationReport(interaction) {
     });
   }
 
-async function handleDisputeSubmission(interaction) {
-const channel = interaction.guild.channels.cache.get(config.channels.disputes);
-const userId = interaction.user.id;
-const dispute = interaction.options.getString('dispute');
-
-db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
-    if (err) {
-    console.error('Error checking player:', err);
-    return interaction.reply('An error occurred while submitting the dispute. Please try again later.');
-    }
-
-    if (!playerRow) {
-    return interaction.reply('You must be a registered player to submit a dispute.');
-    }
-
-    const disputeId = Math.random().toString(36).substring(7); // Generate a unique dispute ID
-
-    const embed = new EmbedBuilder()
-    .setTitle('Dispute Submission')
-    .setDescription(`Submitted by: ${interaction.user.username}\n\n${dispute}`)
-    .setFooter({ text: `Dispute ID: ${disputeId}` });
-
-    channel.send({ embeds: [embed] });
-    interaction.reply('Your dispute has been submitted for review.');
-});
-}
+  async function handleDisputeSubmission(interaction) {
+    const channel = interaction.guild.channels.cache.get(config.channels.disputes);
+    const userId = interaction.user.id;
+    const dispute = interaction.options.getString('dispute');
+  
+    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+      if (err) {
+        console.error('Error checking player:', err);
+        return interaction.reply('An error occurred while submitting the dispute. Please try again later.');
+      }
+  
+      if (!playerRow) {
+        return interaction.reply('You must be a registered player to submit a dispute.');
+      }
+  
+      db.run('INSERT INTO disputes (submitter_id, dispute_text) VALUES (?, ?)', [userId, dispute], function(err) {
+        if (err) {
+          console.error('Error inserting dispute:', err);
+          return interaction.reply('An error occurred while submitting the dispute. Please try again later.');
+        }
+  
+        const disputeId = this.lastID;
+        const embed = new EmbedBuilder()
+          .setTitle('Dispute Submission')
+          .setDescription(`Submitted by: ${interaction.user.username}\n\n${dispute}`)
+          .setFooter({ text: `Dispute ID: ${disputeId}` });
+  
+        channel.send({ embeds: [embed] });
+        interaction.reply('Your dispute has been submitted for review.');
+      });
+    });
+  }
 
 async function handleDisputeResolution(interaction) {
-  const channel = interaction.guild.channels.cache.get(config.channels.disputes);
-  const userId = interaction.user.id;
-  const disputeId = interaction.options.getString('dispute_id');
-  const resolution = interaction.options.getString('resolution');
-  const isAdmin = await isGameManager(interaction);
-
-  db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
-    if (err) {
-      console.error('Error checking player:', err);
-      return interaction.reply('An error occurred while resolving the dispute. Please try again later.');
-    }
-
+    const isAdmin = await isGameManager(interaction);
+  
     if (!isAdmin) {
-      return interaction.reply('You must be an admin to resolve disputes.');
+      return interaction.reply('You must be a game manager to resolve disputes.');
     }
-
-    channel.messages.fetch(disputeId)
-      .then((message) => {
-        const embed = new EmbedBuilder()
-          .setTitle('Dispute Resolution')
-          .setDescription(`Dispute ID: ${disputeId}\nResolved by: ${interaction.user.username}\n\n${resolution}`);
-        message.reply({ embeds: [embed] });
-        interaction.reply('The dispute has been resolved.');
-      })
-      .catch((err) => {
-        console.error('Error fetching dispute message:', err);
-        interaction.reply('An error occurred while resolving the dispute. Please check the dispute ID and try again.');
-      });
-  });
-}
+  
+    const disputeId = interaction.options.getString('dispute_id');
+    const resolution = interaction.options.getString('resolution');
+  
+    db.get('SELECT * FROM disputes WHERE id = ?', [disputeId], (err, row) => {
+      if (err) {
+        console.error('Error fetching dispute:', err);
+        return interaction.reply('An error occurred while resolving the dispute. Please try again later.');
+      }
+  
+      if (!row) {
+        return interaction.reply('The specified dispute does not exist.');
+      }
+  
+      const channel = interaction.guild.channels.cache.get(config.channels.disputes);
+      const embed = new EmbedBuilder()
+        .setTitle('Dispute Resolution')
+        .setDescription(`Dispute ID: ${disputeId}\nResolved by: ${interaction.user.username}\n\n${resolution}`);
+  
+      channel.send({ embeds: [embed] });
+      interaction.reply('The dispute has been resolved.');
+    });
+  }
 
 async function displayLeaderboard(interaction) {
   const channel = interaction.guild.channels.cache.get(config.channels.leaderboard);
