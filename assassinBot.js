@@ -1,7 +1,9 @@
-import { Client, GatewayIntentBits, Modal, TextInputComponent } from 'discord.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 import MessageActionRow from 'discord.js';
 import MessageButton from 'discord.js';
 import MessageEmbed from 'discord.js';
+import Modal from 'discord.js';
+import { TextInputComponent } from 'discord.js';
 import { load } from 'js-yaml';
 import { readFileSync } from 'fs';
 import { Sequelize, DataTypes } from 'sequelize';
