@@ -1,4 +1,4 @@
-const Discord = require('discord.js');
+import 'discord.js';
 import { TextInputComponent } from 'discord.js';
 import { load } from 'js-yaml';
 import { readFileSync } from 'fs';
