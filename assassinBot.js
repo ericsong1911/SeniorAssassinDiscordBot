@@ -14,13 +14,12 @@ const client = new Client({
 
 let config;
 let db;
+config = yaml.parse(fs.readFileSync('config.yml', 'utf8'));
+db = new sqlite3.Database('assassin.db');
 
 client.once('ready', () => {
   console.log('Assassin Bot is ready!');
-  config = yaml.parse(fs.readFileSync('config.yml', 'utf8'));
-  db = new sqlite3.Database('assassin.db');
   initializeDatabase();
-  client.login(config.bot.token);
 });
 
 function initializeDatabase() {
@@ -862,3 +861,5 @@ function startGameLoop() {
     updateGameState();
   }, 60000);
 }
+
+client.login(config.bot.token);
