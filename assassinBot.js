@@ -153,6 +153,7 @@ const MessageActionRow = Discord.MessageActionRow;
 const MessageButton = Discord.MessageButton;
 const MessageEmbed = Discord.MessageEmbed;
 const Modal = Discord.Modal;
+const Interaction = Discord.Interaction;
 
 // Event listener for when the bot is ready
 client.on('ready', async () => {
@@ -160,7 +161,7 @@ client.on('ready', async () => {
   
     // Register slash commands
     const guild = client.guilds.cache.get(config.bot.guild);
-    await interaction.guild.commands.set([
+    await Interaction.guild.commands.set([
       {
         name: 'join',
         description: 'Join the game',
