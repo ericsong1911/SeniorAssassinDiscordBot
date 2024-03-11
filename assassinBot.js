@@ -160,7 +160,7 @@ client.on('ready', async () => {
   
     // Register slash commands
     const guild = client.guilds.cache.get(config.bot.guild);
-    await guild.commands.set([
+    await interaction.guild.commands.set([
       {
         name: 'join',
         description: 'Join the game',
