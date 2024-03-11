@@ -70,6 +70,8 @@ const commands = [
     new SlashCommandBuilder().setName('player-list').setDescription('Display the list of players and their status'),
     new SlashCommandBuilder().setName('team-list').setDescription('Display the list of teams and their information'),
     new SlashCommandBuilder().setName('help').setDescription('Display the help message'),
+    new SlashCommandBuilder().setName('eliminate').setDescription('Eliminate a player from the game (admin only)').addStringOption(option => option.setName('player_id').setDescription('The ID of the player to eliminate').setRequired(true)),
+    new SlashCommandBuilder().setName('revive').setDescription('Revive a player in the game (admin only)').addStringOption(option => option.setName('player_id').setDescription('The ID of the player to revive').setRequired(true)),
   ];
 
 const rest = new REST({ version: '9' }).setToken(config.bot.token);
@@ -123,7 +125,11 @@ client.on('interactionCreate', async (interaction) => {
     } else if (commandName === 'team-list') {
       await displayTeamList(interaction);
     } else if (commandName === 'help') {
-    await displayHelp(interaction);
+      await displayHelp(interaction);
+    } else if (commandName === 'eliminate') {
+      await eliminatePlayer(interaction);
+    } else if (commandName === 'revive') {
+      await revivePlayer(interaction);
     }
   });
 
@@ -770,6 +776,68 @@ async function displayHelp(interaction) {
     interaction.reply({ embeds: [embed] });
   }
 
+  async function eliminatePlayer(interaction) {
+    const isAdmin = await isGameManager(interaction);
+  
+    if (!isAdmin) {
+      return interaction.reply('You must be a game manager to eliminate players.');
+    }
+  
+    const playerId = interaction.options.getString('player_id');
+  
+    db.get('SELECT * FROM players WHERE id = ?', [playerId], (err, row) => {
+      if (err) {
+        console.error('Error fetching player:', err);
+        return interaction.reply('An error occurred while eliminating the player. Please try again later.');
+      }
+  
+      if (!row) {
+        return interaction.reply('The specified player does not exist.');
+      }
+  
+      db.run('UPDATE players SET is_alive = 0 WHERE id = ?', [playerId], (err) => {
+        if (err) {
+          console.error('Error eliminating player:', err);
+          return interaction.reply('An error occurred while eliminating the player. Please try again later.');
+        }
+  
+        interaction.reply(`Player with ID ${playerId} has been eliminated from the game.`);
+        updateLeaderboard();
+      });
+    });
+  }
+
+  async function revivePlayer(interaction) {
+    const isAdmin = await isGameManager(interaction);
+  
+    if (!isAdmin) {
+      return interaction.reply('You must be a game manager to revive players.');
+    }
+  
+    const playerId = interaction.options.getString('player_id');
+  
+    db.get('SELECT * FROM players WHERE id = ?', [playerId], (err, row) => {
+      if (err) {
+        console.error('Error fetching player:', err);
+        return interaction.reply('An error occurred while reviving the player. Please try again later.');
+      }
+  
+      if (!row) {
+        return interaction.reply('The specified player does not exist.');
+      }
+  
+      db.run('UPDATE players SET is_alive = 1 WHERE id = ?', [playerId], (err) => {
+        if (err) {
+          console.error('Error reviving player:', err);
+          return interaction.reply('An error occurred while reviving the player. Please try again later.');
+        }
+  
+        interaction.reply(`Player with ID ${playerId} has been revived in the game.`);
+        updateLeaderboard();
+      });
+    });
+  }
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
@@ -823,45 +891,45 @@ client.on('messageCreate', async (message) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  const [action, assassinationId] = interaction.customId.split('_');
-
-  if (action === 'approve') {
-    db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
-      if (err) {
-        console.error('Error fetching assassination:', err);
-        return interaction.reply('An error occurred while processing the assassination. Please try again later.');
-      }
-
-      if (!row) {
-        return interaction.reply('The specified assassination does not exist.');
-      }
-
-      const assassinId = row.assassin_id;
-      const targetId = row.target_id;
-
-      db.run('UPDATE players SET is_alive = 0 WHERE id = ?', [targetId], (err) => {
+    if (!interaction.isButton()) return;
+  
+    const [action, assassinationId] = interaction.customId.split('_');
+  
+    if (action === 'approve') {
+      db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
         if (err) {
-          console.error('Error updating player status:', err);
+          console.error('Error fetching assassination:', err);
           return interaction.reply('An error occurred while processing the assassination. Please try again later.');
         }
-
-        db.run('INSERT INTO kills (assassin_id, target_id) VALUES (?, ?)', [assassinId, targetId], (err) => {
+  
+        if (!row) {
+          return interaction.reply('The specified assassination does not exist.');
+        }
+  
+        const assassinId = row.assassin_id;
+        const targetId = row.target_id;
+  
+        db.run('UPDATE players SET is_alive = 0 WHERE id = ?', [targetId], (err) => {
           if (err) {
-            console.error('Error inserting kill:', err);
+            console.error('Error updating player status:', err);
             return interaction.reply('An error occurred while processing the assassination. Please try again later.');
           }
-
-          interaction.update({ content: 'The assassination has been approved.', components: [] });
-          updateLeaderboard();
+  
+          db.run('INSERT INTO kills (assassin_id, target_id, assassination_id) VALUES (?, ?, ?)', [assassinId, targetId, assassinationId], (err) => {
+            if (err) {
+              console.error('Error inserting kill:', err);
+              return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+            }
+  
+            interaction.update({ content: `The assassination (ID: ${assassinationId}) has been approved.`, components: [] });
+            updateLeaderboard();
+          });
         });
       });
-    });
-  } else if (action === 'reject') {
-    interaction.update({ content: 'The assassination has been rejected.', components: [] });
-  }
-});
+    } else if (action === 'reject') {
+      interaction.update({ content: `The assassination (ID: ${assassinationId}) has been rejected.`, components: [] });
+    }
+  });
 
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
