@@ -1,4 +1,7 @@
 const { Client, GatewayIntentBits, MessageAttachment, MessageEmbed } = require('discord.js');
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v9');
 const yaml = require('yaml');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
@@ -50,6 +53,40 @@ function initializeDatabase() {
     FOREIGN KEY (target_id) REFERENCES players (id)
   )`);
 }
+
+const commands = [
+    new SlashCommandBuilder().setName('join').setDescription('Register for the game'),
+    new SlashCommandBuilder().setName('create-team').setDescription('Create a new team').addStringOption(option => option.setName('name').setDescription('The name of the team').setRequired(true)),
+    new SlashCommandBuilder().setName('join-team').setDescription('Request to join a team').addIntegerOption(option => option.setName('team').setDescription('The ID of the team to join').setRequired(true)),
+    new SlashCommandBuilder().setName('leave-team').setDescription('Leave your current team'),
+    new SlashCommandBuilder().setName('transfer-ownership').setDescription('Transfer team ownership to another player').addUserOption(option => option.setName('player').setDescription('The player to transfer ownership to').setRequired(true)),
+    new SlashCommandBuilder().setName('kick-player').setDescription('Kick a player from your team').addUserOption(option => option.setName('player').setDescription('The player to kick').setRequired(true)),
+    new SlashCommandBuilder().setName('start-game').setDescription('Start the game'),
+    new SlashCommandBuilder().setName('report-assassination').setDescription('Report an assassination with evidence').addIntegerOption(option => option.setName('target').setDescription('The ID of the assassinated player').setRequired(true)).addAttachmentOption(option => option.setName('evidence').setDescription('Evidence of the assassination').setRequired(true)),
+    new SlashCommandBuilder().setName('submit-dispute').setDescription('Submit a dispute for review').addStringOption(option => option.setName('dispute').setDescription('The details of the dispute').setRequired(true)),
+    new SlashCommandBuilder().setName('resolve-dispute').setDescription('Resolve a dispute').addStringOption(option => option.setName('dispute_id').setDescription('The ID of the dispute to resolve').setRequired(true)).addStringOption(option => option.setName('resolution').setDescription('The resolution of the dispute').setRequired(true)),
+    new SlashCommandBuilder().setName('leaderboard').setDescription('Display the current leaderboard'),
+    new SlashCommandBuilder().setName('rules').setDescription('Display the game rules'),
+    new SlashCommandBuilder().setName('player-list').setDescription('Display the list of players and their status'),
+    new SlashCommandBuilder().setName('help').setDescription('Display the help message'),
+  ];
+
+const rest = new REST({ version: '9' }).setToken(config.bot.token);
+
+(async () => {
+  try {
+    console.log('Started refreshing application (/) commands.');
+
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands },
+    );
+
+    console.log('Successfully reloaded application (/) commands.');
+  } catch (error) {
+    console.error(error);
+  }
+})();
 
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
