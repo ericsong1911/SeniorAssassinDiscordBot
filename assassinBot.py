@@ -47,6 +47,19 @@ def create_dispute_embed(dispute_id, dispute_info):
 async def on_ready():
     print(f"Bot is ready. Logged in as {bot.user.name}")
 
+    # Set up channels
+    global leaderboard_channel, status_channel, assassination_channel, dispute_channel
+    leaderboard_channel = bot.get_channel(config['leaderboard_channel_id'])
+    status_channel = bot.get_channel(config['status_channel_id'])
+    assassination_channel = bot.get_channel(config['assassination_channel_id'])
+    dispute_channel = bot.get_channel(config['dispute_channel_id'])
+
+    # Clear channels on bot startup
+    await leaderboard_channel.purge()
+    await status_channel.purge()
+    await assassination_channel.purge()
+    await dispute_channel.purge()
+
 # Bot commands
 @bot.command()
 @commands.check(is_game_manager)
@@ -135,9 +148,9 @@ async def status(ctx):
     if game_started:
         if teams:
             for team_name, team_info in teams.items():
-                await ctx.send(embed=create_team_embed(team_name, team_info['members']))
+                await status_channel.send(embed=create_team_embed(team_name, team_info['members']))
         else:
-            await ctx.send("No teams have been formed yet.")
+            await status_channel.send("No teams have been formed yet.")
     else:
         await ctx.send("No game is currently in progress.")
 
@@ -145,9 +158,10 @@ async def status(ctx):
 async def leaderboard(ctx):
     if game_started:
         if teams:
-            await ctx.send(embed=create_leaderboard_embed())
+            await leaderboard_channel.purge()
+            await leaderboard_channel.send(embed=create_leaderboard_embed())
         else:
-            await ctx.send("No teams have been formed yet.")
+            await leaderboard_channel.send("No teams have been formed yet.")
     else:
         await ctx.send("No game is currently in progress.")
 
@@ -179,14 +193,14 @@ async def assassinate(ctx, target: discord.Member):
                         assassination_embed.set_image(url=assassination_proof.attachments[0].url)
                         assassination_embed.add_field(name="Assassin", value=f"<@{ctx.author.id}>", inline=True)
                         assassination_embed.add_field(name="Target", value=f"<@{target.id}>", inline=True)
-                        assassination_message = await ctx.send(embed=assassination_embed)
+                        assassination_message = await assassination_channel.send(embed=assassination_embed)
 
                         await assassination_message.add_reaction('✅')
                         await assassination_message.add_reaction('❌')
 
                         await asyncio.sleep(config['voting_duration'])
 
-                        assassination_message = await ctx.channel.fetch_message(assassination_message.id)
+                        assassination_message = await assassination_channel.fetch_message(assassination_message.id)
                         upvotes = 0
                         downvotes = 0
                         for reaction in assassination_message.reactions:
@@ -201,7 +215,7 @@ async def assassinate(ctx, target: discord.Member):
                                 teams[target_team]['members'].remove(target.id)
                                 if not teams[target_team]['members']:
                                     teams[target_team]['eliminated'] = True
-                                    await ctx.send(f"Team '{target_team}' has been eliminated!")
+                                    await status_channel.send(f"Team '{target_team}' has been eliminated!")
                                     del assassinations[assassination_id]
                                     # Assign new targets to the assassin team
                                     alive_teams = [team for team in teams.values() if not team['eliminated']]
@@ -212,16 +226,18 @@ async def assassinate(ctx, target: discord.Member):
                                             if potential_target != teams[assassin_team]:
                                                 new_target_team = potential_target
                                         teams[assassin_team]['target'] = new_target_team['members'][0]
-                                        await ctx.send(f"Team '{assassin_team}' has been assigned a new target: <@{teams[assassin_team]['target']}>")
+                                        await status_channel.send(f"Team '{assassin_team}' has been assigned a new target: <@{teams[assassin_team]['target']}>")
                                     elif len(alive_teams) == 1:
-                                        await ctx.send(f"Team '{alive_teams[0]}' is the last team standing and wins the game!")
+                                        await status_channel.send(f"Team '{alive_teams[0]}' is the last team standing and wins the game!")
                                         game_started = False
                                 else:
-                                    await ctx.send(f"Assassination confirmed. <@{target.id}> has been eliminated from team '{target_team}'.")
+                                    await status_channel.send(f"Assassination confirmed. <@{target.id}> has been eliminated from team '{target_team}'.")
+                                await leaderboard_channel.purge()
+                                await leaderboard_channel.send(embed=create_leaderboard_embed())
                             else:
-                                await ctx.send("Assassination rejected. Insufficient votes.")
+                                await assassination_channel.send("Assassination rejected. Insufficient votes.")
                         else:
-                            await ctx.send("No votes were cast. Assassination rejected.")
+                            await assassination_channel.send("No votes were cast. Assassination rejected.")
 
                     except asyncio.TimeoutError:
                         await ctx.send("No assassination proof provided within the time limit. Assassination cancelled.")
@@ -241,7 +257,7 @@ async def dispute(ctx, *, description: str):
         disputes[dispute_id] = {'submitter': ctx.author.id, 'description': description}
         await ctx.send(f"Dispute #{dispute_id} submitted. It will be reviewed by the game manager.")
         game_manager = await bot.fetch_user(config['game_manager_id'])
-        await game_manager.send(embed=create_dispute_embed(dispute_id, disputes[dispute_id]))
+        await dispute_channel.send(embed=create_dispute_embed(dispute_id, disputes[dispute_id]))
     else:
         await ctx.send("No game is currently in progress.")
 
@@ -251,7 +267,7 @@ async def resolve(ctx, dispute_id: int, resolution: str):
     if game_started:
         if dispute_id in disputes:
             dispute_info = disputes[dispute_id]
-            await ctx.send(f"Dispute #{dispute_id} resolved: {resolution}")
+            await dispute_channel.send(f"Dispute #{dispute_id} resolved: {resolution}")
             submitter = await bot.fetch_user(dispute_info['submitter'])
             await submitter.send(f"Your dispute (ID: {dispute_id}) has been resolved: {resolution}")
             del disputes[dispute_id]
@@ -270,7 +286,9 @@ async def disqualify(ctx, member: discord.Member):
                 await ctx.send(f"<@{member.id}> has been disqualified from team '{team_name}'.")
                 if not team_info['members']:
                     del teams[team_name]
-                    await ctx.send(f"Team '{team_name}' has been disqualified as all members have been disqualified.")
+                    await status_channel.send(f"Team '{team_name}' has been disqualified as all members have been disqualified.")
+                    await leaderboard_channel.purge()
+                    await leaderboard_channel.send(embed=create_leaderboard_embed())
                 break
         else:
             await ctx.send("The specified member is not part of any team.")
@@ -279,4 +297,3 @@ async def disqualify(ctx, member: discord.Member):
 
 # Run the bot
 bot.run(config['token'])
-

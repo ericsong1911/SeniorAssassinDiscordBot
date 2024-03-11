@@ -4,3 +4,7 @@ game_manager_id: GAME_MANAGER_DISCORD_ID
 team_size_limit: 4
 manual_approval: true
 voting_duration: 300
+leaderboard_channel_id: LEADERBOARD_CHANNEL_ID
+status_channel_id: STATUS_CHANNEL_ID
+assassination_channel_id: ASSASSINATION_CHANNEL_ID
+dispute_channel_id: DISPUTE_CHANNEL_ID
