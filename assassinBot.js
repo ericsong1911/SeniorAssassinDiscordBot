@@ -861,4 +861,3 @@ function startGameLoop() {
     updateGameState();
   }, 60000);
 }
-client.login(config && config.bot ? config.bot.token : '');
