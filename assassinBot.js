@@ -74,18 +74,18 @@ const commands = [
 const rest = new REST({ version: '9' }).setToken(config.bot.token);
 
 (async () => {
-  try {
+try {
     console.log('Started refreshing application (/) commands.');
 
     await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands },
+    Routes.applicationGuildCommands(config.bot.client_id, config.guild_id),
+    { body: commands },
     );
 
     console.log('Successfully reloaded application (/) commands.');
-  } catch (error) {
+} catch (error) {
     console.error(error);
-  }
+}
 })();
 
 client.on('interactionCreate', async (interaction) => {

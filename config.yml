@@ -10,6 +10,7 @@ game:
   min_team_count: 2
   time_limit_enabled: true
   time_limit_duration: 72 # hours
+  guild_id: YOUR_GUILD_ID
 
 channels:
   status: STATUS_CHANNEL_ID
