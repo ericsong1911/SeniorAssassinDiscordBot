@@ -123,6 +123,14 @@ client.on('interactionCreate', async (interaction) => {
       await displayHelp(interaction);
     }
   });
+
+  function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
   
   async function handlePlayerRegistration(interaction) {
     const userId = interaction.user.id;
@@ -528,84 +536,89 @@ async function handleGameStart(interaction) {
 }
 
 async function handleAssassinationReport(interaction) {
-  const channel = interaction.channel;
-  const assassinId = interaction.user.id;
-  const targetId = interaction.options.getInteger('target');
-  const evidenceImage = interaction.options.getAttachment('evidence');
-
-  db.get('SELECT * FROM players WHERE discord_id = ?', [assassinId], (err, assassinRow) => {
-    if (err) {
-      console.error('Error checking assassin:', err);
-      return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
-    }
-
-    if (!assassinRow || !assassinRow.is_alive) {
-      return interaction.reply('You must be an alive player to report an assassination.');
-    }
-
-    db.get('SELECT * FROM players WHERE id = ?', [targetId], (err, targetRow) => {
+    const channel = interaction.channel;
+    const assassinId = interaction.user.id;
+    const targetId = interaction.options.getInteger('target');
+    const evidenceImage = interaction.options.getAttachment('evidence');
+  
+    db.get('SELECT * FROM players WHERE discord_id = ?', [assassinId], (err, assassinRow) => {
       if (err) {
-        console.error('Error checking target:', err);
+        console.error('Error checking assassin:', err);
         return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
       }
-
-      if (!targetRow || !targetRow.is_alive) {
-        return interaction.reply('The specified target is not an alive player.');
+  
+      if (!assassinRow || !assassinRow.is_alive) {
+        return interaction.reply('You must be an alive player to report an assassination.');
       }
-
-      const embed = new EmbedBuilder()
-        .setTitle('Assassination Report')
-        .setDescription(`Assassin: ${interaction.user.username}\nTarget: ${targetRow.name}`)
-        .setImage(evidenceImage.url)
-        .setFooter('Please vote on whether to approve or reject the assassination.');
-
-      const approveButton = {
-        type: 2,
-        style: 3,
-        label: 'Approve',
-        custom_id: `approve_assassination_${targetId}`,
-      };
-
-      const rejectButton = {
-        type: 2,
-        style: 4,
-        label: 'Reject',
-        custom_id: `reject_assassination_${targetId}`,
-      };
-
-      const actionRow = {
-        type: 1,
-        components: [approveButton, rejectButton],
-      };
-
-      channel.send({ embeds: [embed], components: [actionRow] });
-      interaction.reply('Your assassination report has been submitted for voting.');
+  
+      db.get('SELECT * FROM players WHERE id = ?', [targetId], (err, targetRow) => {
+        if (err) {
+          console.error('Error checking target:', err);
+          return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
+        }
+  
+        if (!targetRow || !targetRow.is_alive) {
+          return interaction.reply('The specified target is not an alive player.');
+        }
+  
+        const assassinationId = Math.random().toString(36).substring(7); // Generate a unique assassination ID
+  
+        const embed = new EmbedBuilder()
+          .setTitle('Assassination Report')
+          .setDescription(`Assassin: ${interaction.user.username}\nTarget: ${targetRow.name}`)
+          .setImage(evidenceImage.url)
+          .setFooter({ text: `Assassination ID: ${assassinationId} | Please vote on whether to approve or reject the assassination.` });
+  
+        const approveButton = {
+          type: 2,
+          style: 3,
+          label: 'Approve',
+          custom_id: `approve_assassination_${assassinationId}`,
+        };
+  
+        const rejectButton = {
+          type: 2,
+          style: 4,
+          label: 'Reject',
+          custom_id: `reject_assassination_${assassinationId}`,
+        };
+  
+        const actionRow = {
+          type: 1,
+          components: [approveButton, rejectButton],
+        };
+  
+        channel.send({ embeds: [embed], components: [actionRow] });
+        interaction.reply('Your assassination report has been submitted for voting.');
+      });
     });
-  });
-}
+  }
 
 async function handleDisputeSubmission(interaction) {
-  const channel = interaction.guild.channels.cache.get(config.channels.disputes);
-  const userId = interaction.user.id;
-  const dispute = interaction.options.getString('dispute');
+const channel = interaction.guild.channels.cache.get(config.channels.disputes);
+const userId = interaction.user.id;
+const dispute = interaction.options.getString('dispute');
 
-  db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
     if (err) {
-      console.error('Error checking player:', err);
-      return interaction.reply('An error occurred while submitting the dispute. Please try again later.');
+    console.error('Error checking player:', err);
+    return interaction.reply('An error occurred while submitting the dispute. Please try again later.');
     }
 
     if (!playerRow) {
-      return interaction.reply('You must be a registered player to submit a dispute.');
+    return interaction.reply('You must be a registered player to submit a dispute.');
     }
 
+    const disputeId = Math.random().toString(36).substring(7); // Generate a unique dispute ID
+
     const embed = new EmbedBuilder()
-      .setTitle('Dispute Submission')
-      .setDescription(`Submitted by: ${interaction.user.username}\n\n${dispute}`);
+    .setTitle('Dispute Submission')
+    .setDescription(`Submitted by: ${interaction.user.username}\n\n${dispute}`)
+    .setFooter({ text: `Dispute ID: ${disputeId}` });
 
     channel.send({ embeds: [embed] });
     interaction.reply('Your dispute has been submitted for review.');
-  });
+});
 }
 
 async function handleDisputeResolution(interaction) {
@@ -628,8 +641,7 @@ async function handleDisputeResolution(interaction) {
       .then((message) => {
         const embed = new EmbedBuilder()
           .setTitle('Dispute Resolution')
-          .setDescription(`Resolved by: ${interaction.user.username}\n\n${resolution}`);
-
+          .setDescription(`Dispute ID: ${disputeId}\nResolved by: ${interaction.user.username}\n\n${resolution}`);
         message.reply({ embeds: [embed] });
         interaction.reply('The dispute has been resolved.');
       })
@@ -681,7 +693,7 @@ async function displayPlayerList(interaction) {
 
     let playerList = 'Player List:\n\n';
     rows.forEach((row) => {
-      playerList += `${row.name} - Team: ${row.team_name || 'None'}, Status: ${row.is_alive ? 'Alive' : 'Eliminated'}\n`;
+      playerList += `ID: ${row.id} | ${row.name} - Team: ${row.team_name || 'None'}, Status: ${row.is_alive ? 'Alive' : 'Eliminated'}\n`;
     });
 
     const embed = new EmbedBuilder()
@@ -812,29 +824,111 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-function updateGameState() {
-  const now = new Date();
-  const endDate = new Date(config.game.end_date);
-
-  if (now >= endDate) {
-    db.run('UPDATE game_state SET state = ?', ['ended'], (err) => {
-      if (err) {
-        console.error('Error updating game state:', err);
-        return;
-      }
-
-      db.get('SELECT t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC LIMIT 1', (err, row) => {
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isButton()) return;
+  
+    const [action, assassinationId] = interaction.customId.split('_');
+  
+    if (action === 'approve') {
+      db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
         if (err) {
-          console.error('Error fetching winning team:', err);
+          console.error('Error fetching assassination:', err);
+          return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+        }
+  
+        if (!row) {
+          return interaction.reply('The specified assassination does not exist.');
+        }
+  
+        const assassinId = row.assassin_id;
+        const targetId = row.target_id;
+  
+        db.run('UPDATE players SET is_alive = 0 WHERE id = ?', [targetId], (err) => {
+          if (err) {
+            console.error('Error updating player status:', err);
+            return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+          }
+  
+          db.run('INSERT INTO kills (assassin_id, target_id) VALUES (?, ?)', [assassinId, targetId], (err) => {
+            if (err) {
+              console.error('Error inserting kill:', err);
+              return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+            }
+  
+            interaction.update({ content: `The assassination (ID: ${assassinationId}) has been approved.`, components: [] });
+            updateLeaderboard();
+          });
+        });
+      });
+    } else if (action === 'reject') {
+      interaction.update({ content: `The assassination (ID: ${assassinationId}) has been rejected.`, components: [] });
+    }
+  });
+
+  function updateGameState() {
+    const now = new Date();
+    const endDate = new Date(config.game.end_date);
+  
+    if (now >= endDate) {
+      db.run('UPDATE game_state SET state = ?', ['ended'], (err) => {
+        if (err) {
+          console.error('Error updating game state:', err);
           return;
         }
-
-        const channel = client.channels.cache.get(config.channels.status);
-        channel.send(`The game has ended! The winning team is ${row.team_name} with ${row.kills} kills.`);
+  
+        db.all('SELECT t.id, t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC', (err, rows) => {
+          if (err) {
+            console.error('Error fetching team standings:', err);
+            return;
+          }
+  
+          if (rows.length === 1) {
+            const winningTeam = rows[0];
+            const channel = client.channels.cache.get(config.channels.status);
+            channel.send(`The game has ended! The winning team is ${winningTeam.team_name} with ${winningTeam.kills} kills.`);
+          } else if (rows.length > 1) {
+            const tiedTeams = rows.filter((row) => row.kills === rows[0].kills);
+            if (tiedTeams.length > 1) {
+              const channel = client.channels.cache.get(config.channels.status);
+              channel.send('The game has ended in a tie! Entering sudden death mode.');
+  
+              // Sudden death logic
+              const suddenDeathTeams = tiedTeams.map((team) => team.id);
+              const shuffledTeams = shuffle(suddenDeathTeams);
+  
+              for (let i = 0; i < shuffledTeams.length; i += 2) {
+                const team1 = shuffledTeams[i];
+                const team2 = shuffledTeams[i + 1];
+  
+                if (team2) {
+                  db.run('UPDATE teams SET target_id = ? WHERE id = ?', [team2, team1], (err) => {
+                    if (err) {
+                      console.error('Error updating sudden death target for team', team1, err);
+                    }
+                  });
+  
+                  db.run('UPDATE teams SET target_id = ? WHERE id = ?', [team1, team2], (err) => {
+                    if (err) {
+                      console.error('Error updating sudden death target for team', team2, err);
+                    }
+                  });
+                }
+              }
+  
+              channel.send('Sudden death targets have been assigned. The first team to eliminate their target wins!');
+            } else {
+              const winningTeam = tiedTeams[0];
+              const channel = client.channels.cache.get(config.channels.status);
+              channel.send(`The game has ended! The winning team is ${winningTeam.team_name} with ${winningTeam.kills} kills.`);
+            }
+          } else {
+            const channel = client.channels.cache.get(config.channels.status);
+            channel.send('The game has ended with no winning team.');
+          }
+        });
       });
-    });
+    }
   }
-}
 
 function assignTargets() {
   db.all('SELECT * FROM teams', (err, rows) => {

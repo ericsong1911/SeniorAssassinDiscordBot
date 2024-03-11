@@ -1,6 +1,6 @@
 {
   "name": "seniorassassindiscordbot",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A Senior Assassin Discord Bot",
   "main": "assassinBot.js",
   "scripts": {
