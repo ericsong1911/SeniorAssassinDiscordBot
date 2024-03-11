@@ -1,0 +1,42 @@
+This is a default template of some senior assassin rules. Feel free to modify to how you need it!
+
+##############
+# Game Rules #
+##############
+
+Game Details  ----------------
+- The game is being managed by {MANAGER}.
+- You may send any questions that you have to {EMAIL ADDRESS}.
+- The game is being run by SeniorAssassinDiscordBot.
+- The game will run from:
+    Start: {TIME AND DATE}
+    End: {TIME AND DATE}
+
+Entrance Rules ---------------
+- To enter, a fee of {FEE} must be paid to {RECEPIENT} via {METHODS} by {TIME AND DATE}.
+- You may form teams up to a size of {SIZE}.
+
+Weapons Rules ----------------
+- Weapons must be foam weapons. Guns will fire foam projectiles, and melee weapons will have the attacking surface made of foam.
+- Kills must be performed in a realistic manner. Throwing bullets at someone WON'T KILL THEM.
+- Any weapons and/or modifications to weapons to cause significant bodily harm are blacklisted and will lead to disqualification.
+
+Boundary Rules ---------------
+- This game is not to be played on school property or during school-sanctioned events.
+- Assassinations are not allowed at workplaces, volunteering organizations, extracurriculars, nor houses of worship.
+- You are not allowed to tresspass. Access to private property may only be granted by someone who has authority over said property. This includes but is not limited to owners, family members, and so on.
+- Operation of a motor vehicle by the victim makes them immune to assassination. This is for safety purposes, no one wants to be shot while driving.
+
+Assassination Rules ----------
+- All assassins will recieve a team target. 
+- Your target must be hit by a projectile that was launched by a weapon or by a sizable melee weapon to be counted as an assassination.
+- Targets may use self-defense against their assassin. If an assassin is hit by their target, the target is safe from assassination until midnight the next day.
+- To report an assassination, photographic evidence with the target must be given.
+
+Winners ----------------------
+- The last team standing will be declared the winner. If multiple teams are still alive, the winner is the team with the most eliminations.
+- Tie breakers are done through sudden death. One member of your team getting assassinated during a tiebreaker results in the victory of the other team.
+
+Disputes ---------------------
+- Any deviation to the rules must be reported to the game manager.
+- Rule breakers will be disqualified.
