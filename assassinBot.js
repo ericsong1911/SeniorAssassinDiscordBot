@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, MessageActionRow, MessageButton, MessageEmbed, Modal } = require('discord.js');;
+const Discord = require('discord.js');
 import { TextInputComponent } from 'discord.js';
 import { load } from 'js-yaml';
 import { readFileSync } from 'fs';
@@ -146,9 +146,13 @@ Player.belongsTo(Team, { foreignKey: 'teamId' });
 Team.hasMany(Player, { foreignKey: 'teamId' });
 
 // Set up the Discord client
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers],
+const client = new Discord.Client({
+  intents: [Discord.GatewayIntentBits.Guilds, Discord.GatewayIntentBits.GuildMessages, Discord.GatewayIntentBits.GuildMembers],
 });
+const MessageActionRow = Discord.MessageActionRow;
+const MessageButton = Discord.MessageButton;
+const MessageEmbed = Discord.MessageEmbed;
+const Modal = Discord.Modal;
 
 // Event listener for when the bot is ready
 client.on('ready', () => {
