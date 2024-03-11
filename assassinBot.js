@@ -1,7 +1,7 @@
-const Discord = require('discord.js');
-const yaml = require('js-yaml');
-const fs = require('fs');
-const { Sequelize, DataTypes } = require('sequelize');
+import { Client, GatewayIntentBits, MessageEmbed, MessageActionRow, MessageButton, Modal, TextInputComponent } from 'discord.js';
+import { load } from 'js-yaml';
+import { readFileSync } from 'fs';
+import { Sequelize, DataTypes } from 'sequelize';
 
 // Read the configuration file
 const config = load(readFileSync('config.yml', 'utf8'));
