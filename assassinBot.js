@@ -155,9 +155,46 @@ const MessageEmbed = Discord.MessageEmbed;
 const Modal = Discord.Modal;
 
 // Event listener for when the bot is ready
-client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}`);
-});
+client.on('ready', async () => {
+    console.log(`Logged in as ${client.user.tag}`);
+  
+    // Register slash commands
+    const guild = client.guilds.cache.get(config.bot.guild);
+    await guild.commands.set([
+      {
+        name: 'join',
+        description: 'Join the game',
+      },
+      {
+        name: 'start',
+        description: 'Start the game',
+      },
+      {
+        name: 'end',
+        description: 'End the game',
+      },
+      {
+        name: 'report',
+        description: 'Report an assassination attempt',
+      },
+      {
+        name: 'leaderboard',
+        description: 'Show the leaderboard',
+      },
+      {
+        name: 'announce',
+        description: 'Make an announcement',
+        options: [
+          {
+            name: 'message',
+            type: 'STRING',
+            description: 'The announcement message',
+            required: true,
+          },
+        ],
+      },
+    ]);
+  });
 
 // Event listener for handling commands
 client.on('interactionCreate', async (interaction) => {
@@ -333,12 +370,12 @@ client.on('interactionCreate', async (interaction) => {
             }
           });
         }
-      } else if (interaction.customId === 'start_game') {
+      } else if (interaction.commandName === 'start') {
         // Check if the user has the game manager role
         const gameManagerRole = interaction.guild.roles.cache.get(config.game_manager.role_id);
         if (!interaction.member.roles.cache.has(gameManagerRole.id)) {
-          await interaction.reply('Only game managers can start the game.');
-          return;
+            await interaction.reply('Only game managers can start the game.');
+            return;
         }
   
         // Check if the game is already active
@@ -357,12 +394,12 @@ client.on('interactionCreate', async (interaction) => {
         logEvent('Game Started', `Game ID: ${gameState.id}`);
   
         await interaction.reply('The game has been started and initial targets have been assigned!');
-      } else if (interaction.customId === 'end_game') {
+      } else if (interaction.commandName === 'end') {
         // Check if the user has the game manager role
         const gameManagerRole = interaction.guild.roles.cache.get(config.game_manager.role_id);
         if (!interaction.member.roles.cache.has(gameManagerRole.id)) {
-          await interaction.reply('Only game managers can end the game.');
-          return;
+            await interaction.reply('Only game managers can end the game.');
+            return;
         }
   
         // Check if the game is already ended
@@ -378,7 +415,7 @@ client.on('interactionCreate', async (interaction) => {
         logEvent('Game Ended', `Game ID: ${gameState.id}`);
   
         await interaction.reply('The game has been ended!');
-      } else if (interaction.customId === 'report_assassination') {
+      } else if (interaction.commandName === 'report') {
         // Check if the player is in an active team
         const player = await Player.findOne({ where: { id: interaction.user.id } });
         if (!player || !player.teamId) {
