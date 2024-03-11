@@ -161,110 +161,173 @@ client.on('interactionCreate', async (interaction) => {
   
       const player = await Player.findOne({ where: { id: interaction.user.id } });
   
-      if (interaction.customId === 'create_team') {
-        if (!player) {
-          // Player is not registered, prompt them to register first
-          await interaction.reply('You need to register first before creating a team.');
+      if (interaction.commandName === 'join') {
+        // Check if the game is in the lobby state
+        const gameState = await GameState.findOne();
+        if (gameState.state !== 'lobby') {
+          await interaction.reply('Registration is only allowed during the lobby phase.');
           return;
         }
   
-        // Prompt the player to enter a team name
-        await interaction.reply('Please enter a team name:');
-        const filter = (m) => m.author.id === interaction.user.id;
-        const collector = interaction.channel.createMessageCollector({ filter, max: 1, time: config.game.team_creation_timeout });
+        // Check if the player is already registered
+        if (player) {
+          await interaction.reply('You are already registered.');
+          return;
+        }
   
-        collector.on('collect', async (message) => {
-          const teamName = message.content;
+        // Prompt the player to choose between creating a team or joining an existing one
+        const teamOptions = new Discord.MessageEmbed()
+          .setTitle('Team Options')
+          .setDescription('Please choose an option:')
+          .addField('1. Create a new team', 'Select this option to create a new team.')
+          .addField('2. Join an existing team', 'Select this option to join an existing team.');
+  
+        const teamOptionsMessage = await interaction.user.send({ embeds: [teamOptions] });
+        await teamOptionsMessage.react('1️⃣');
+        await teamOptionsMessage.react('2️⃣');
+  
+        const reactionFilter = (reaction, user) => {
+          return ['1️⃣', '2️⃣'].includes(reaction.emoji.name) && user.id === interaction.user.id;
+        };
+  
+        const teamChoice = await teamOptionsMessage.awaitReactions({ filter: reactionFilter, max: 1, time: 60000, errors: ['time'] })
+          .then(collected => {
+            const reaction = collected.first();
+            return reaction.emoji.name;
+          })
+          .catch(async () => {
+            await interaction.user.send('Team selection timed out. Please try again.');
+            return null;
+          });
+  
+        if (!teamChoice) {
+          await interaction.reply('Registration canceled.');
+          return;
+        }
+  
+        if (teamChoice === '1️⃣') {
+          // Prompt the player to enter a team name
+          await interaction.user.send('Please enter a team name:');
+          const messageFilter = (m) => m.author.id === interaction.user.id;
+          const teamNameMessage = await interaction.user.dmChannel.awaitMessages({ filter: messageFilter, max: 1, time: 60000, errors: ['time'] })
+            .then(collected => {
+              return collected.first();
+            })
+            .catch(async () => {
+              await interaction.user.send('Team name selection timed out. Please try again.');
+              return null;
+            });
+  
+          if (!teamNameMessage) {
+            await interaction.reply('Registration canceled.');
+            return;
+          }
+  
+          const teamName = teamNameMessage.content;
           const existingTeam = await Team.findOne({ where: { name: teamName } });
+  
           if (existingTeam) {
-            await interaction.followUp('A team with that name already exists. Please choose a different name.');
-          } else {
-            const newTeam = await Team.create({ name: teamName, ownerId: interaction.user.id });
-            await player.update({ teamId: newTeam.id });
-            await interaction.followUp(`Team "${teamName}" has been created successfully.`);
+            await interaction.user.send('A team with that name already exists. Please choose a different name.');
+            await interaction.reply('Registration failed. Team name already exists.');
+            return;
           }
-        });
   
-        collector.on('end', async (collected, reason) => {
-          if (reason === 'time') {
-            await interaction.followUp('Team creation timed out. Please try again.');
+          // Create a new team and assign the player as the owner
+          const newTeam = await Team.create({ name: teamName, ownerId: interaction.user.id });
+          await Player.create({ id: interaction.user.id, name: interaction.user.username, teamId: newTeam.id });
+          await interaction.user.send(`Team "${teamName}" has been created successfully. You are the team owner.`);
+          await interaction.reply('Registration successful. Team created.');
+        } else if (teamChoice === '2️⃣') {
+          // Fetch the list of available teams
+          const teams = await Team.findAll({ where: { isActive: true } });
+          if (teams.length === 0) {
+            await interaction.user.send('There are no teams available to join at the moment.');
+            await interaction.reply('Registration failed. No teams available.');
+            return;
           }
-        });
-      } else if (interaction.customId === 'join_team') {
-        if (!player) {
-          // Player is not registered, prompt them to register first
-          await interaction.reply('You need to register first before joining a team.');
-          return;
+  
+          const teamOptions = teams.map((team, index) => `${index + 1}. ${team.name}`).join('\n');
+          const teamSelectionEmbed = new Discord.MessageEmbed()
+            .setTitle('Team Selection')
+            .setDescription(`Please select a team to join:\n\n${teamOptions}`);
+  
+          await interaction.user.send({ embeds: [teamSelectionEmbed] });
+  
+          const selectionFilter = (m) => m.author.id === interaction.user.id && !isNaN(parseInt(m.content));
+          const teamSelectionMessage = await interaction.user.dmChannel.awaitMessages({ filter: selectionFilter, max: 1, time: 60000, errors: ['time'] })
+            .then(collected => {
+              return collected.first();
+            })
+            .catch(async () => {
+              await interaction.user.send('Team selection timed out. Please try again.');
+              return null;
+            });
+  
+          if (!teamSelectionMessage) {
+            await interaction.reply('Registration canceled.');
+            return;
+          }
+  
+          const selectedTeamIndex = parseInt(teamSelectionMessage.content) - 1;
+          if (selectedTeamIndex < 0 || selectedTeamIndex >= teams.length) {
+            await interaction.user.send('Invalid team selection. Please try again.');
+            await interaction.reply('Registration failed. Invalid team selection.');
+            return;
+          }
+  
+          const selectedTeam = teams[selectedTeamIndex];
+  
+          // Send a join request to the team owner
+          const owner = await client.users.fetch(selectedTeam.ownerId);
+          const joinEmbed = new Discord.MessageEmbed()
+            .setTitle('Team Join Request')
+            .setDescription(`${interaction.user.username} has requested to join your team "${selectedTeam.name}".`)
+            .setFooter('This request will expire in 24 hours.');
+  
+          const joinRow = new Discord.MessageActionRow().addComponents(
+            new Discord.MessageButton()
+              .setCustomId('approve_join')
+              .setLabel('Approve')
+              .setStyle('SUCCESS'),
+            new Discord.MessageButton()
+              .setCustomId('reject_join')
+              .setLabel('Reject')
+              .setStyle('DANGER')
+          );
+  
+          const joinMessage = await owner.send({ embeds: [joinEmbed], components: [joinRow] });
+  
+          const buttonFilter = (i) => i.customId === 'approve_join' || i.customId === 'reject_join';
+          const collector = joinMessage.createMessageComponentCollector({ filter: buttonFilter, max: 1, time: config.game.join_request_timeout });
+  
+          collector.on('collect', async (i) => {
+            if (i.customId === 'approve_join') {
+              const playerCount = await Player.count({ where: { teamId: selectedTeam.id } });
+              if (playerCount >= config.game.max_players_per_team) {
+                await interaction.user.send('The selected team has reached the maximum number of players.');
+                await i.update({ content: 'Join request rejected. Team is full.', components: [] });
+                await interaction.reply('Registration failed. Selected team is full.');
+              } else {
+                await Player.create({ id: interaction.user.id, name: interaction.user.username, teamId: selectedTeam.id });
+                await interaction.user.send(`Your join request for team "${selectedTeam.name}" has been approved.`);
+                await i.update({ content: 'Join request approved.', components: [] });
+                await interaction.reply('Registration successful. Joined team.');
+              }
+            } else if (i.customId === 'reject_join') {
+              await interaction.user.send(`Your join request for team "${selectedTeam.name}" has been rejected.`);
+              await i.update({ content: 'Join request rejected.', components: [] });
+              await interaction.reply('Registration failed. Join request rejected.');
+            }
+          });
+  
+          collector.on('end', async (collected, reason) => {
+            if (reason === 'time') {
+              await interaction.user.send(`Your join request for team "${selectedTeam.name}" has expired.`);
+              await joinMessage.edit({ content: 'Join request expired.', components: [] });
+              await interaction.reply('Registration failed. Join request expired.');
+            }
+          });
         }
-  
-        // Fetch the list of available teams
-        const teams = await Team.findAll();
-        if (teams.length === 0) {
-          await interaction.reply('There are no teams available to join at the moment.');
-          return;
-        }
-  
-        const teamOptions = teams.map((team) => ({
-          label: team.name,
-          value: team.id.toString(),
-        }));
-  
-        const row = new Discord.MessageActionRow().addComponents(
-          new Discord.MessageSelectMenu()
-            .setCustomId('team_select')
-            .setPlaceholder('Select a team to join')
-            .addOptions(teamOptions)
-        );
-  
-        await interaction.reply({ content: 'Please select a team to join:', components: [row] });
-      } else if (interaction.customId === 'team_select') {
-        const selectedTeamId = interaction.values[0];
-        const selectedTeam = await Team.findOne({ where: { id: selectedTeamId } });
-        if (!selectedTeam) {
-          await interaction.reply('The selected team does not exist anymore.');
-          return;
-        }
-  
-        // Send a join request to the team owner
-        const owner = await client.users.fetch(selectedTeam.ownerId);
-        const joinEmbed = new Discord.MessageEmbed()
-          .setTitle('Team Join Request')
-          .setDescription(`${interaction.user.username} has requested to join your team "${selectedTeam.name}".`)
-          .setFooter('This request will expire in 24 hours.');
-  
-        const joinRow = new Discord.MessageActionRow().addComponents(
-          new Discord.MessageButton()
-            .setCustomId('approve_join')
-            .setLabel('Approve')
-            .setStyle('SUCCESS'),
-          new Discord.MessageButton()
-            .setCustomId('reject_join')
-            .setLabel('Reject')
-            .setStyle('DANGER')
-        );
-  
-        const joinMessage = await owner.send({ embeds: [joinEmbed], components: [joinRow] });
-  
-        const filter = (i) => i.customId === 'approve_join' || i.customId === 'reject_join';
-        const collector = joinMessage.createMessageComponentCollector({ filter, max: 1, time: config.game.join_request_timeout });
-  
-        collector.on('collect', async (i) => {
-          if (i.customId === 'approve_join') {
-            await player.update({ teamId: selectedTeam.id });
-            await interaction.followUp(`Your join request for team "${selectedTeam.name}" has been approved.`);
-            await i.update({ content: 'Join request approved.', components: [] });
-          } else if (i.customId === 'reject_join') {
-            await interaction.followUp(`Your join request for team "${selectedTeam.name}" has been rejected.`);
-            await i.update({ content: 'Join request rejected.', components: [] });
-          }
-        });
-  
-        collector.on('end', async (collected, reason) => {
-          if (reason === 'time') {
-            await interaction.followUp(`Your join request for team "${selectedTeam.name}" has expired.`);
-            await joinMessage.edit({ content: 'Join request expired.', components: [] });
-          }
-        });
       } else if (interaction.customId === 'start_game') {
         // Check if the user has the game manager role
         const gameManagerRole = interaction.guild.roles.cache.get(config.game_manager.role_id);

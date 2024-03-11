@@ -5,8 +5,12 @@ bot:
 game:
   min_players: 4
   max_players: 20
-  team_creation_timeout: 30000
+  min_teams: 2
+  max_players_per_team: 5
+  team_creation_timeout: 60000
   join_request_timeout: 86400000
+  assassination_timeout: 1209600000
+  assassination_timeout_enabled: true
   announcement_channel_id: ANNOUNCEMENT_CHANNEL_ID
   notification_channel_id: NOTIFICATION_CHANNEL_ID
 
