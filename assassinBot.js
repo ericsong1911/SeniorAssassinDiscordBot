@@ -78,7 +78,7 @@ try {
     console.log('Started refreshing application (/) commands.');
 
     await rest.put(
-    Routes.applicationGuildCommands(config.bot.client_id, config.guild_id),
+    Routes.applicationGuildCommands(config.bot.client_id, config.channels.guild_id),
     { body: commands },
     );
 

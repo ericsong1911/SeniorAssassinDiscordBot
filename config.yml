@@ -1,6 +1,7 @@
 bot:
   token: YOUR_BOT_TOKEN
   prefix: '!'
+  client_id: YOUR_CLIENT_ID
 
 game:
   start_date: '2023-06-01T00:00:00'
@@ -10,9 +11,9 @@ game:
   min_team_count: 2
   time_limit_enabled: true
   time_limit_duration: 72 # hours
-  guild_id: YOUR_GUILD_ID
 
 channels:
+  guild_id: YOUR_GUILD_ID
   status: STATUS_CHANNEL_ID
   leaderboard: LEADERBOARD_CHANNEL_ID
   voting: VOTING_CHANNEL_ID
