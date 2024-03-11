@@ -153,7 +153,7 @@ const MessageActionRow = Discord.MessageActionRow;
 const MessageButton = Discord.MessageButton;
 const MessageEmbed = Discord.MessageEmbed;
 const Modal = Discord.Modal;
-const Interaction = Discord.Interaction;
+const Interaction = Discord.BaseCommandInteraction;
 
 // Event listener for when the bot is ready
 client.on('ready', async () => {
