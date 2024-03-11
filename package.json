@@ -1,0 +1,23 @@
+{
+  "name": "seniorassassindiscordbot",
+  "version": "1.0.0",
+  "description": "A Senior Assassin Discord Bot",
+  "main": "assassinBot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericsong1911/SeniorAssassinDiscordBot.git"
+  },
+  "keywords": [
+    "discordbot"
+  ],
+  "author": "ericsong1911",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/ericsong1911/SeniorAssassinDiscordBot/issues"
+  },
+  "homepage": "https://github.com/ericsong1911/SeniorAssassinDiscordBot#readme",
+  "type": "module"
+}
