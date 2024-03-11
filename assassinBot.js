@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, MessageAttachment, MessageEmbed } = require('discord.js');
+const { Client, GatewayIntentBits, MessageAttachment, EmbedBuilder } = require('discord.js');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
@@ -220,7 +220,7 @@ client.on('interactionCreate', async (interaction) => {
         // Send a join request message to the team owner
         client.users.fetch(ownerId)
           .then((owner) => {
-            const embed = new MessageEmbed()
+            const embed = new EmbedBuilder()
               .setTitle('Team Join Request')
               .setDescription(`${interaction.user.username} has requested to join your team "${teamRow.name}".`)
               .setFooter('Please use the buttons below to approve or reject the request.');
@@ -553,7 +553,7 @@ async function handleAssassinationReport(interaction) {
         return interaction.reply('The specified target is not an alive player.');
       }
 
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setTitle('Assassination Report')
         .setDescription(`Assassin: ${interaction.user.username}\nTarget: ${targetRow.name}`)
         .setImage(evidenceImage.url)
@@ -599,7 +599,7 @@ async function handleDisputeSubmission(interaction) {
       return interaction.reply('You must be a registered player to submit a dispute.');
     }
 
-    const embed = new MessageEmbed()
+    const embed = new EmbedBuilder()
       .setTitle('Dispute Submission')
       .setDescription(`Submitted by: ${interaction.user.username}\n\n${dispute}`);
 
@@ -626,7 +626,7 @@ async function handleDisputeResolution(interaction) {
 
     channel.messages.fetch(disputeId)
       .then((message) => {
-        const embed = new MessageEmbed()
+        const embed = new EmbedBuilder()
           .setTitle('Dispute Resolution')
           .setDescription(`Resolved by: ${interaction.user.username}\n\n${resolution}`);
 
@@ -654,7 +654,7 @@ async function displayLeaderboard(interaction) {
       leaderboard += `${index + 1}. ${row.team_name} - ${row.kills} kills\n`;
     });
 
-    const embed = new MessageEmbed()
+    const embed = new EmbedBuilder()
       .setTitle('Assassin Game Leaderboard')
       .setDescription(leaderboard);
 
@@ -665,7 +665,7 @@ async function displayLeaderboard(interaction) {
 
 async function displayRules(interaction) {
   const rulesFile = fs.readFileSync(config.rules_file, 'utf8');
-  const embed = new MessageEmbed()
+  const embed = new EmbedBuilder()
     .setTitle('Assassin Game Rules')
     .setDescription(rulesFile);
 
@@ -684,7 +684,7 @@ async function displayPlayerList(interaction) {
       playerList += `${row.name} - Team: ${row.team_name || 'None'}, Status: ${row.is_alive ? 'Alive' : 'Eliminated'}\n`;
     });
 
-    const embed = new MessageEmbed()
+    const embed = new EmbedBuilder()
       .setTitle('Assassin Game Player List')
       .setDescription(playerList);
 
@@ -712,7 +712,7 @@ async function displayHelp(interaction) {
     /help - Display this help message
   `;
 
-  const embed = new MessageEmbed()
+  const embed = new EmbedBuilder()
     .setTitle('Assassin Game Help')
     .setDescription(helpMessage);
 
@@ -741,7 +741,7 @@ client.on('messageCreate', async (message) => {
         return message.reply('An error occurred while processing the assassination. Please try again later.');
       }
 
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setTitle('Assassination Evidence')
         .setDescription(`Submitted by: ${message.author.username}`)
         .setImage(attachment.url)
@@ -873,7 +873,7 @@ function updateLeaderboard() {
       leaderboard += `${index + 1}. ${row.team_name} - ${row.kills} kills\n`;
     });
 
-    const embed = new MessageEmbed()
+    const embed = new EmbedBuilder()
       .setTitle('Assassin Game Leaderboard')
       .setDescription(leaderboard);
 
