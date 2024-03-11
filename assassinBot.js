@@ -1,10 +1,10 @@
-const Discord = require('discord.js');
-const yaml = require('js-yaml');
-const fs = require('fs');
-const { Sequelize, DataTypes } = require('sequelize');
+import { Client, GatewayIntentBits, MessageEmbed, MessageActionRow, MessageButton, Modal, TextInputComponent } from 'discord.js';
+import { load } from 'js-yaml';
+import { readFileSync } from 'fs';
+import { Sequelize, DataTypes } from 'sequelize';
 
 // Read the configuration file
-const config = yaml.load(fs.readFileSync('config.yml', 'utf8'));
+const config = load(readFileSync('config.yml', 'utf8'));
 
 // Set up the database connection
 const sequelize = new Sequelize({
@@ -145,8 +145,8 @@ Player.belongsTo(Team, { foreignKey: 'teamId' });
 Team.hasMany(Player, { foreignKey: 'teamId' });
 
 // Set up the Discord client
-const client = new Discord.Client({
-  intents: [Discord.Intents.FLAGS.GUILDS, Discord.Intents.FLAGS.GUILD_MESSAGES],
+const client = new Client({
+  intents: [GatewayIntentBits.FLAGS.GUILDS, GatewayIntentBits.FLAGS.GUILD_MESSAGES],
 });
 
 // Event listener for when the bot is ready
@@ -176,7 +176,7 @@ client.on('interactionCreate', async (interaction) => {
         }
   
         // Prompt the player to choose between creating a team or joining an existing one
-        const teamOptions = new Discord.MessageEmbed()
+        const teamOptions = new MessageEmbed()
           .setTitle('Team Options')
           .setDescription('Please choose an option:')
           .addField('1. Create a new team', 'Select this option to create a new team.')
@@ -247,7 +247,7 @@ client.on('interactionCreate', async (interaction) => {
           }
   
           const teamOptions = teams.map((team, index) => `${index + 1}. ${team.name}`).join('\n');
-          const teamSelectionEmbed = new Discord.MessageEmbed()
+          const teamSelectionEmbed = new MessageEmbed()
             .setTitle('Team Selection')
             .setDescription(`Please select a team to join:\n\n${teamOptions}`);
   
@@ -279,17 +279,17 @@ client.on('interactionCreate', async (interaction) => {
   
           // Send a join request to the team owner
           const owner = await client.users.fetch(selectedTeam.ownerId);
-          const joinEmbed = new Discord.MessageEmbed()
+          const joinEmbed = new MessageEmbed()
             .setTitle('Team Join Request')
             .setDescription(`${interaction.user.username} has requested to join your team "${selectedTeam.name}".`)
             .setFooter('This request will expire in 24 hours.');
   
-          const joinRow = new Discord.MessageActionRow().addComponents(
-            new Discord.MessageButton()
+          const joinRow = new MessageActionRow().addComponents(
+            new MessageButton()
               .setCustomId('approve_join')
               .setLabel('Approve')
               .setStyle('SUCCESS'),
-            new Discord.MessageButton()
+            new MessageButton()
               .setCustomId('reject_join')
               .setLabel('Reject')
               .setStyle('DANGER')
@@ -389,20 +389,20 @@ client.on('interactionCreate', async (interaction) => {
         }
   
         // Prompt the player to provide evidence and description
-        const evidenceModal = new Discord.Modal()
+        const evidenceModal = new Modal()
           .setCustomId('assassination_evidence')
           .setTitle('Assassination Evidence')
           .addComponents(
-            new Discord.MessageActionRow().addComponents(
-              new Discord.TextInputComponent()
+            new MessageActionRow().addComponents(
+              new TextInputComponent()
                 .setCustomId('evidence_url')
                 .setLabel('Evidence URL')
                 .setStyle('SHORT')
                 .setPlaceholder('Enter the URL of the evidence image')
                 .setRequired(true)
             ),
-            new Discord.MessageActionRow().addComponents(
-              new Discord.TextInputComponent()
+            new MessageActionRow().addComponents(
+              new TextInputComponent()
                 .setCustomId('description')
                 .setLabel('Description')
                 .setStyle('PARAGRAPH')
@@ -430,17 +430,17 @@ client.on('interactionCreate', async (interaction) => {
   
         // Send a notification to the game managers' channel
         const gameManagerChannel = interaction.guild.channels.cache.get(config.game_manager.channel_id);
-        const attemptEmbed = new Discord.MessageEmbed()
+        const attemptEmbed = new MessageEmbed()
           .setTitle('New Assassination Attempt')
           .setDescription(`Assassin Team: ${player.team.name}\nEvidence: ${evidenceUrl}\nDescription: ${description}`)
           .setFooter(`Attempt ID: ${assassinationAttempt.id}`);
   
-        const validationRow = new Discord.MessageActionRow().addComponents(
-          new Discord.MessageButton()
+        const validationRow = new MessageActionRow().addComponents(
+          new MessageButton()
             .setCustomId('validate_attempt')
             .setLabel('Validate')   
             .setStyle('SUCCESS'),
-          new Discord.MessageButton()
+          new MessageButton()
             .setCustomId('reject_attempt')
             .setLabel('Reject')
             .setStyle('DANGER')
@@ -628,7 +628,7 @@ async function generateLeaderboardEmbed() {
       });
   
       // Generate the leaderboard embed
-      const leaderboardEmbed = new Discord.MessageEmbed()
+      const leaderboardEmbed = new MessageEmbed()
         .setTitle('Leaderboard')
         .setDescription('Current standings of the teams:');
   
@@ -642,7 +642,7 @@ async function generateLeaderboardEmbed() {
       return leaderboardEmbed;
     } catch (error) {
       console.error('Error generating leaderboard:', error);
-      return new Discord.MessageEmbed()
+      return new MessageEmbed()
         .setTitle('Leaderboard')
         .setDescription('An error occurred while generating the leaderboard.');
     }
