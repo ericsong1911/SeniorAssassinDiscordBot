@@ -703,7 +703,7 @@ async function displayRules(interaction) {
 }
 
 async function displayPlayerList(interaction) {
-  db.all('SELECT p.name, t.name AS team_name, p.is_alive FROM players p LEFT JOIN teams t ON p.team_id = t.id', (err, rows) => {
+  db.all('SELECT p.id, p.name, t.name AS team_name, p.is_alive FROM players p LEFT JOIN teams t ON p.team_id = t.id', (err, rows) => {
     if (err) {
       console.error('Error fetching player list:', err);
       return interaction.reply('An error occurred while displaying the player list. Please try again later.');
