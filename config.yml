@@ -1,0 +1,6 @@
+token: YOUR_BOT_TOKEN
+prefix: !
+game_manager_id: GAME_MANAGER_DISCORD_ID
+team_size_limit: 4
+manual_approval: true
+voting_duration: 300
