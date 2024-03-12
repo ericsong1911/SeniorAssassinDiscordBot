@@ -387,11 +387,11 @@ async function approvePlayer(interaction, playerId) {
           return interaction.reply('You are already a member of a team.');
         }
   
-        const ownerId = teamRow.owner_id;
+        const ownerId = BigInt(teamRow.owner_id);
         console.log('Owner ID:', ownerId);
 
         try {
-          const owner = client.users.fetch(String(ownerId));
+          const owner = client.users.fetch(ownerId.toString());
   
           const embed = new EmbedBuilder()
             .setTitle('Team Join Request')
