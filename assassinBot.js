@@ -388,7 +388,6 @@ async function approvePlayer(interaction, playerId) {
         }
   
         const ownerId = BigInt(teamRow.owner_id).toString();
-        console.log('Owner ID:', ownerId);
 
         try {
           const owner = await client.users.fetch(ownerId);
@@ -1169,8 +1168,8 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
         }
   
         interaction.reply(`Player has been added to your team!`);
-  
-        client.users.fetch(playerId)
+        
+        client.users.fetch(BigInt(playerId).toString())
           .then((player) => {
             player.send(`Your request to join the team has been approved!`);
           })
@@ -1180,7 +1179,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
       });
     } else if (action === 'joinreject') {
       interaction.reply(`Join request has been rejected.`);
-      client.users.fetch(playerId)
+      client.users.fetch(BigInt(playerId).toString())
         .then((player) => {
           player.send(`Your request to join the team has been rejected.`);
         })
