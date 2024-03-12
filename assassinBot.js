@@ -50,6 +50,18 @@ function initializeDatabase() {
     dispute_text TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Create the game_state table
+  db.run(`CREATE TABLE IF NOT EXISTS game_state (
+    state TEXT DEFAULT 'lobby'
+  )`);
+
+  // Insert the default game state if it doesn't exist
+  db.get('SELECT * FROM game_state', (err, row) => {
+    if (!row) {
+      db.run('INSERT INTO game_state (state) VALUES (?)', ['lobby']);
+    }
+  });
 }
 
 const commands = [
