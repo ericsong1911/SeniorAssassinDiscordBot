@@ -387,7 +387,8 @@ async function approvePlayer(interaction, playerId) {
           return interaction.reply('You are already a member of a team.');
         }
   
-        const ownerId = teamRow.owner_id.toString();
+        const ownerId = BigInt(teamRow.owner_id);
+        ownerId = ownerId.toString;
         console.log('Owner ID:', ownerId);
 
         try {
