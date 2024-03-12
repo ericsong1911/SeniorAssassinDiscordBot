@@ -60,7 +60,11 @@ const commands = [
     new SlashCommandBuilder().setName('transfer-ownership').setDescription('Transfer team ownership to another player').addUserOption(option => option.setName('player').setDescription('The player to transfer ownership to').setRequired(true)),
     new SlashCommandBuilder().setName('kick-player').setDescription('Kick a player from your team').addUserOption(option => option.setName('player').setDescription('The player to kick').setRequired(true)),
     new SlashCommandBuilder().setName('start-game').setDescription('Start the game'),
-    new SlashCommandBuilder().setName('report-assassination').setDescription('Report an assassination with evidence').addIntegerOption(option => option.setName('target').setDescription('The ID of the assassinated player').setRequired(true)).addAttachmentOption(option => option.setName('evidence').setDescription('Evidence of the assassination').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('report-assassination')
+      .setDescription('Report an assassination with evidence')
+      .addUserOption(option => option.setName('target').setDescription('The player to assassinate').setRequired(true))
+      .addAttachmentOption(option => option.setName('evidence').setDescription('Evidence of the assassination').setRequired(true)),
     new SlashCommandBuilder().setName('submit-dispute').setDescription('Submit a dispute for review').addStringOption(option => option.setName('dispute').setDescription('The details of the dispute').setRequired(true)),
     new SlashCommandBuilder().setName('resolve-dispute').setDescription('Resolve a dispute').addStringOption(option => option.setName('dispute_id').setDescription('The ID of the dispute to resolve').setRequired(true)).addStringOption(option => option.setName('resolution').setDescription('The resolution of the dispute').setRequired(true)),
     new SlashCommandBuilder().setName('leaderboard').setDescription('Display the current leaderboard'),
@@ -93,6 +97,33 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
   
     const { commandName } = interaction;
+  
+    // Check if the game is in the lobby phase
+    db.get('SELECT * FROM game_state', async (err, row) => {
+      if (err) {
+        console.error('Error checking game state:', err);
+        return interaction.reply('An error occurred while processing the command. Please try again later.');
+      }
+  
+      const gameState = row ? row.state : 'lobby';
+  
+      if (gameState === 'lobby') {
+        if (
+          commandName !== 'join' &&
+          commandName !== 'create-team' &&
+          commandName !== 'join-team' &&
+          commandName !== 'leave-team' &&
+          commandName !== 'transfer-ownership' &&
+          commandName !== 'kick-player' &&
+          commandName !== 'start-game' &&
+          commandName !== 'rules' &&
+          commandName !== 'player-list' &&
+          commandName !== 'team-list' &&
+          commandName !== 'help'
+        ) {
+          return interaction.reply('This command is not available during the lobby phase.');
+        }
+      }
   
     if (commandName === 'join') {
       await handlePlayerRegistration(interaction);
@@ -130,6 +161,7 @@ client.on('interactionCreate', async (interaction) => {
       await revivePlayer(interaction);
     }
   });
+});
 
   function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -559,8 +591,14 @@ async function handleGameStart(interaction) {
 async function handleAssassinationReport(interaction) {
     const channel = interaction.channel;
     const assassinId = interaction.user.id;
-    const targetId = interaction.options.getInteger('target');
+    const target = interaction.options.getUser('target');
     const evidenceImage = interaction.options.getAttachment('evidence');
+  
+    if (!target) {
+      return interaction.reply('Please provide a valid player to assassinate.');
+    }
+  
+    const targetId = target.id;
   
     db.get('SELECT * FROM players WHERE discord_id = ?', [assassinId], (err, assassinRow) => {
       if (err) {
@@ -572,7 +610,7 @@ async function handleAssassinationReport(interaction) {
         return interaction.reply('You must be an alive player to report an assassination.');
       }
   
-      db.get('SELECT * FROM players WHERE id = ?', [targetId], (err, targetRow) => {
+      db.get('SELECT * FROM players WHERE discord_id = ?', [targetId], (err, targetRow) => {
         if (err) {
           console.error('Error checking target:', err);
           return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
@@ -586,7 +624,7 @@ async function handleAssassinationReport(interaction) {
   
         const embed = new EmbedBuilder()
           .setTitle('Assassination Report')
-          .setDescription(`Assassin: ${interaction.user.username}\nTarget: ${targetRow.name}`)
+          .setDescription(`Assassin: ${interaction.user.username}\nTarget: ${target.username}`)
           .setImage(evidenceImage.url)
           .setFooter({ text: `Assassination ID: ${assassinationId} | Please vote on whether to approve or reject the assassination.` });
   
@@ -613,7 +651,7 @@ async function handleAssassinationReport(interaction) {
         interaction.reply('Your assassination report has been submitted for voting.');
       });
     });
-  }
+}
 
   async function handleDisputeSubmission(interaction) {
     const channel = interaction.guild.channels.cache.get(config.channels.disputes);
