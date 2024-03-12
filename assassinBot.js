@@ -329,14 +329,15 @@ async function approvePlayer(interaction, playerId) {
       if (!row) {
         return interaction.reply('You must be registered for the game to create a team.');
       }
-
+  
       if (row.team_id) {
         return interaction.reply('You are already a member of a team. You cannot create a new team.');
       }
   
       const teamName = interaction.options.getString('name');
+      const ownerId = row.id;
   
-      db.run('INSERT INTO teams (name, owner_id) VALUES (?, ?)', [teamName, row.id], function(err) {
+      db.run('INSERT INTO teams (name, owner_id) VALUES (?, ?)', [teamName, ownerId], function(err) {
         if (err) {
           console.error('Error creating team:', err);
           return interaction.reply('An error occurred while creating a team. Please try again later.');
