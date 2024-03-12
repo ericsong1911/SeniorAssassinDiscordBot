@@ -1043,7 +1043,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
   async function handleAssassinationButtonInteraction(interaction, action, assassinationId) {
     if (action === 'assassinationapprove') {
       // Retrieve the assassin and target IDs from the database
-      db.get('SELECT assassin_id, target_id FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
+      db.get('SELECT assassin_id, target_id FROM assassinations WHERE id = ?', [assassinationId], async (err, row) => {
         if (err) {
           console.error('Error fetching assassination data:', err);
           return interaction.reply('An error occurred while processing the assassination. Please try again later.');
@@ -1057,7 +1057,12 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
         const targetId = row.target_id;
   
         // Handle assassination approval
-        handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
+        try {
+          await handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
+        } catch (error) {
+          console.error('Error handling assassination approval:', error);
+          interaction.reply('An error occurred while processing the assassination. Please try again later.');
+        }
       });
     } else if (action === 'assassinationreject') {
       // Handle assassination rejection
