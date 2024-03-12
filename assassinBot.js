@@ -337,7 +337,7 @@ async function approvePlayer(interaction, playerId) {
       }
   
       const teamName = interaction.options.getString('name');
-      const ownerId = row.id; // Use the player's ID as the owner ID
+      const ownerId = row.id;
   
       db.run('INSERT INTO teams (name, owner_id) VALUES (?, ?)', [teamName, ownerId], function(err) {
         if (err) {
@@ -388,9 +388,12 @@ async function approvePlayer(interaction, playerId) {
         }
   
         const ownerId = teamRow.owner_id;
+        console.log('Owner ID:', ownerId);
         
         try {
           const owner = await client.users.fetch(ownerId);
+
+
   
           const embed = new EmbedBuilder()
             .setTitle('Team Join Request')
