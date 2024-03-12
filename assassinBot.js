@@ -59,6 +59,13 @@ function initializeDatabase() {
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS kills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assassin_id TEXT,
+    target_id TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Create the game_state table
   db.run(`CREATE TABLE IF NOT EXISTS game_state (
     state TEXT DEFAULT 'lobby'
@@ -297,14 +304,14 @@ client.on('interactionCreate', async (interaction) => {
               type: 2,
               style: 3,
               label: 'Approve',
-              custom_id: `approve_join_${playerRow.id}_${teamId}`,
+              custom_id: `join_approve_${playerRow.id}_${teamId}`,
             };
   
             const rejectButton = {
               type: 2,
               style: 4,
               label: 'Reject',
-              custom_id: `reject_join_${playerRow.id}_${teamId}`,
+              custom_id: `join_reject_${playerRow.id}_${teamId}`,
             };
   
             const actionRow = {
@@ -321,41 +328,6 @@ client.on('interactionCreate', async (interaction) => {
       });
     });
   }
-  
-  client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isButton()) return;
-  
-    const [action, playerId, teamId] = interaction.customId.split('_');
-  
-    if (action === 'approve') {
-      db.run('UPDATE players SET team_id = ? WHERE id = ?', [teamId, playerId], (err) => {
-        if (err) {
-          console.error('Error updating player team:', err);
-          return interaction.reply('An error occurred while approving the join request. Please try again later.');
-        }
-  
-        interaction.reply(`Player has been added to your team!`);
-  
-        client.users.fetch(playerId)
-          .then((player) => {
-            player.send(`Your request to join the team has been approved!`);
-          })
-          .catch((err) => {
-            console.error('Error sending approval message to player:', err);
-          });
-      });
-    } else if (action === 'reject') {
-      interaction.reply(`Join request has been rejected.`);
-  
-      client.users.fetch(playerId)
-        .then((player) => {
-          player.send(`Your request to join the team has been rejected.`);
-        })
-        .catch((err) => {
-          console.error('Error sending rejection message to player:', err);
-        });
-    }
-  });
   
   async function handleTeamLeaving(interaction) {
     const userId = interaction.user.id;
@@ -789,7 +761,7 @@ async function displayPlayerList(interaction) {
 }
 
 async function displayTeamList(interaction) {
-    db.all('SELECT t.id, t.name, p.name AS owner_name, COUNT(p2.id) AS member_count FROM teams t LEFT JOIN players p ON t.owner_id = p.id LEFT JOIN players p2 ON t.id = p2.team_id GROUP BY t.id', (err, rows) => {
+    db.all('SELECT t.id, t.name, p.name AS owner_name, COUNT(p2.id) AS member_count, CASE WHEN COUNT(p2.id) = COUNT(CASE WHEN p2.is_alive = 1 THEN 1 END) THEN "Alive" ELSE "Eliminated" END AS status FROM teams t LEFT JOIN players p ON t.owner_id = p.id LEFT JOIN players p2 ON t.id = p2.team_id GROUP BY t.id', (err, rows) => {
       if (err) {
         console.error('Error fetching team list:', err);
         return interaction.reply('An error occurred while displaying the team list. Please try again later.');
@@ -797,7 +769,7 @@ async function displayTeamList(interaction) {
   
       let teamList = 'Team List:\n\n';
       rows.forEach((row) => {
-        teamList += `ID: ${row.id} | ${row.name} - Owner: ${row.owner_name}, Members: ${row.member_count}\n`;
+        teamList += `ID: ${row.id} | ${row.name} - Owner: ${row.owner_name}, Members: ${row.member_count}, Status: ${row.status}\n`;
       });
   
       const embed = new EmbedBuilder()
@@ -864,6 +836,8 @@ async function displayHelp(interaction) {
         }
   
         interaction.reply(`Player with ID ${playerId} has been eliminated from the game.`);
+        const statusChannel = client.channels.cache.get(config.channels.status);
+        statusChannel.send(`Player ${targetRow.name} from team ${targetTeam.name} has been eliminated!`);
         updateLeaderboard();
       });
     });
@@ -900,119 +874,229 @@ async function displayHelp(interaction) {
     });
   }
 
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
-
-  if (message.channel.id === config.channels.voting) {
-    if (message.attachments.size === 0) {
-      await message.delete();
-      return;
-    }
-
-    const attachment = message.attachments.first();
-    const assassination = {
-      assassin_id: message.author.id,
-      target_id: null,
-      evidence_url: attachment.url,
-    };
-
-    db.run('INSERT INTO assassinations (assassin_id, evidence_url) VALUES (?, ?)', [assassination.assassin_id, assassination.evidence_url], (err) => {
+  function checkTeamElimination(targetTeamId) {
+    db.get('SELECT * FROM teams WHERE id = ?', [targetTeamId], (err, targetTeam) => {
       if (err) {
-        console.error('Error inserting assassination:', err);
-        return message.reply('An error occurred while processing the assassination. Please try again later.');
+        console.error('Error fetching target team:', err);
+        return;
       }
-
-      const embed = new EmbedBuilder()
-        .setTitle('Assassination Evidence')
-        .setDescription(`Submitted by: ${message.author.username}`)
-        .setImage(attachment.url)
-        .setFooter('Please vote on whether to approve or reject the assassination.');
-
-      const approveButton = {
-        type: 2,
-        style: 3,
-        label: 'Approve',
-        custom_id: `approve_assassination_${message.id}`,
-      };
-
-      const rejectButton = {
-        type: 2,
-        style: 4,
-        label: 'Reject',
-        custom_id: `reject_assassination_${message.id}`,
-      };
-
-      const actionRow = {
-        type: 1,
-        components: [approveButton, rejectButton],
-      };
-
-      message.reply({ embeds: [embed], components: [actionRow] });
+  
+      if (!targetTeam) {
+        console.error('Target team not found.');
+        return;
+      }
+  
+      db.all('SELECT * FROM players WHERE team_id = ? AND is_alive = 1', [targetTeamId], (err, alivePlayers) => {
+        if (err) {
+          console.error('Error fetching alive players:', err);
+          return;
+        }
+  
+        if (alivePlayers.length === 0) {
+          console.log(`Team ${targetTeam.name} has been eliminated!`);
+          const statusChannel = client.channels.cache.get(config.channels.status);
+          statusChannel.send(`Team ${targetTeam.name} has been eliminated!`);
+  
+          // Find the team that was hunting the eliminated team
+          db.get('SELECT * FROM teams WHERE target_id = ?', [targetTeamId], (err, huntingTeam) => {
+            if (err) {
+              console.error('Error fetching hunting team:', err);
+              return;
+            }
+  
+            if (huntingTeam) {
+              // Assign a new target to the hunting team
+              reassignTarget(huntingTeam.id);
+            }
+          });
+        }
+      });
     });
   }
-});
+
+  function reassignTarget(teamId) {
+    db.all('SELECT * FROM teams WHERE id != ? AND id NOT IN (SELECT target_id FROM teams WHERE target_id IS NOT NULL)', [teamId], (err, availableTargets) => {
+      if (err) {
+        console.error('Error fetching available targets:', err);
+        return;
+      }
+  
+      if (availableTargets.length === 0) {
+        console.log(`No available targets for team ${teamId}`);
+        return;
+      }
+  
+      const newTargetId = availableTargets[Math.floor(Math.random() * availableTargets.length)].id;
+  
+      db.run('UPDATE teams SET target_id = ? WHERE id = ?', [newTargetId, teamId], (err) => {
+        if (err) {
+          console.error('Error updating team target:', err);
+          return;
+        }
+  
+        console.log(`Assigned new target ${newTargetId} to team ${teamId}`);
+  
+        // Send DMs to the team members with their new assigned target
+        db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
+          if (!err && players) {
+            players.forEach((player) => {
+              client.users.fetch(player.discord_id)
+                .then((user) => {
+                  db.get('SELECT * FROM teams WHERE id = ?', [newTargetId], (err, newTargetTeam) => {
+                    if (!err && newTargetTeam) {
+                      user.send(`Your team's new target is: ${newTargetTeam.name}`);
+                    }
+                  });
+                })
+                .catch((err) => {
+                  console.error('Error sending new target DM to player:', err);
+                });
+            });
+          }
+        });
+      });
+    });
+  }
+
+// client.on('messageCreate', async (message) => {
+//   if (message.author.bot) return;
+
+//   if (message.channel.id === config.channels.voting) {
+//     if (message.attachments.size === 0) {
+//       await message.delete();
+//       return;
+//     }
+
+//     const attachment = message.attachments.first();
+//     const assassination = {
+//       assassin_id: message.author.id,
+//       target_id: null,
+//       evidence_url: attachment.url,
+//     };
+
+//     db.run('INSERT INTO assassinations (assassin_id, evidence_url) VALUES (?, ?)', [assassination.assassin_id, assassination.evidence_url], (err) => {
+//       if (err) {
+//         console.error('Error inserting assassination:', err);
+//         return message.reply('An error occurred while processing the assassination. Please try again later.');
+//       }
+
+//       const embed = new EmbedBuilder()
+//         .setTitle('Assassination Evidence')
+//         .setDescription(`Submitted by: ${message.author.username}`)
+//         .setImage(attachment.url)
+//         .setFooter('Please vote on whether to approve or reject the assassination.');
+
+//       const approveButton = {
+//         type: 2,
+//         style: 3,
+//         label: 'Approve',
+//         custom_id: `approve_assassination_${message.id}`,
+//       };
+
+//       const rejectButton = {
+//         type: 2,
+//         style: 4,
+//         label: 'Reject',
+//         custom_id: `reject_assassination_${message.id}`,
+//       };
+
+//       const actionRow = {
+//         type: 1,
+//         components: [approveButton, rejectButton],
+//       };
+
+//       message.reply({ embeds: [embed], components: [actionRow] });
+//     });
+//   }
+// });
 
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
   
-    const [action, assassinationId] = interaction.customId.split('_');
-  
-    if (action === 'approve') {
-      db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
-        if (err) {
-          console.error('Error fetching assassination:', err);
-          return interaction.reply('An error occurred while processing the assassination. Please try again later.');
-        }
-  
-        if (!row) {
-          return interaction.reply('The specified assassination does not exist.');
-        }
-  
-        const assassinId = row.assassin_id;
-        const targetId = row.target_id;
-  
-        db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
-          if (err) {
-            console.error('Error updating player status:', err);
-            return interaction.reply('An error occurred while processing the assassination. Please try again later.');
-          }
-  
-          db.run('INSERT INTO kills (assassin_id, target_id, assassination_id) VALUES (?, ?, ?)', [assassinId, targetId, assassinationId], (err) => {
+    const [prefix, action, playerId, teamId] = interaction.customId.split('_');
+
+    if (prefix === 'join') {
+        if (action === 'approve') {
+            db.run('UPDATE players SET team_id = ? WHERE id = ?', [teamId, playerId], (err) => {
             if (err) {
-              console.error('Error inserting kill:', err);
-              return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+                console.error('Error updating player team:', err);
+                return interaction.reply('An error occurred while approving the join request. Please try again later.');
             }
-  
-            interaction.update({ content: `The assassination (ID: ${assassinationId}) has been approved.`, components: [] });
-            updateLeaderboard();
-  
-            // Send approval message to the assassin
-            client.users.fetch(assassinId)
-              .then((assassin) => {
-                assassin.send(`Your assassination (ID: ${assassinationId}) has been approved!`);
-              })
-              .catch((err) => {
-                console.error('Error sending approval message to assassin:', err);
-              });
-          });
-        });
-      });
-    } else if (action === 'reject') {
-      interaction.update({ content: `The assassination (ID: ${assassinationId}) has been rejected.`, components: [] });
-  
-      // Send rejection message to the assassin
-      db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
-        if (!err && row) {
-          const assassinId = row.assassin_id;
-          client.users.fetch(assassinId)
-            .then((assassin) => {
-              assassin.send(`Your assassination (ID: ${assassinationId}) has been rejected.`);
+        
+            interaction.reply(`Player has been added to your team!`);
+        
+            client.users.fetch(playerId)
+                .then((player) => {
+                player.send(`Your request to join the team has been approved!`);
+                })
+                .catch((err) => {
+                console.error('Error sending approval message to player:', err);
+                });
+            });
+        } else if (action === 'reject') {
+            interaction.reply(`Join request has been rejected.`);
+            client.users.fetch(playerId)
+            .then((player) => {
+                player.send(`Your request to join the team has been rejected.`);
             })
             .catch((err) => {
-              console.error('Error sending rejection message to assassin:', err);
+                console.error('Error sending rejection message to player:', err);
             });
         }
-      });
+      } else if (prefix === 'assassination') {
+        if (action === 'approve') {
+            db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
+              if (err) {
+                console.error('Error updating player status:', err);
+                return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+              }
+          
+              db.run('INSERT INTO kills (assassin_id, target_id) VALUES (?, ?)', [assassinId, targetId], (err) => {
+                if (err) {
+                  console.error('Error inserting kill:', err);
+                  return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+                }
+          
+                interaction.update({ content: `The assassination (ID: ${assassinationId}) has been approved.`, components: [] });
+                const statusChannel = client.channels.cache.get(config.channels.status);
+                statusChannel.send(`Player ${targetRow.name} from team ${targetTeam.name} has been eliminated!`);
+                updateLeaderboard();
+          
+                // Check if the target team has been eliminated
+                db.get('SELECT * FROM players WHERE discord_id = ?', [targetId], (err, targetRow) => {
+                  if (err) {
+                    console.error('Error fetching target player:', err);
+                  } else {
+                    checkTeamElimination(targetRow.team_id);
+                  }
+                });
+          
+                // Send approval message to the assassin
+                client.users.fetch(assassinId)
+                  .then((assassin) => {
+                    assassin.send(`Your assassination (ID: ${assassinationId}) has been approved!`);
+                  })
+                  .catch((err) => {
+                    console.error('Error sending approval message to assassin:', err);
+                  });
+              });
+            });
+        } else if (action === 'reject') {
+            interaction.update({ content: `The assassination (ID: ${assassinationId}) has been rejected.`, components: [] });
+            // Send rejection message to the assassin
+            db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
+            if (!err && row) {
+                const assassinId = row.assassin_id;
+                client.users.fetch(assassinId)
+                .then((assassin) => {
+                    assassin.send(`Your assassination (ID: ${assassinationId}) has been rejected.`);
+                })
+                .catch((err) => {
+                    console.error('Error sending rejection message to assassin:', err);
+                });
+            }
+            });
+        }
     }
   });
 
@@ -1079,23 +1163,23 @@ client.on('interactionCreate', async (interaction) => {
         });
       });
     }
-    db.all('SELECT t.id, t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC', (err, rows) => {
+    db.all('SELECT t.id, t.name AS team_name, COUNT(p.id) AS alive_players FROM teams t LEFT JOIN players p ON t.id = p.team_id AND p.is_alive = 1 GROUP BY t.id', (err, rows) => {
         if (err) {
           console.error('Error fetching team standings:', err);
           return;
         }
     
-        const aliveTeams = rows.filter((row) => row.kills === 0);
+        const aliveTeams = rows.filter((row) => row.alive_players > 0);
     
         if (aliveTeams.length === 1) {
           const winningTeam = aliveTeams[0];
           const channel = client.channels.cache.get(config.channels.status);
           channel.send(`The game has ended! The winning team is ${winningTeam.team_name}.`);
-        } else if (aliveTeams.length > 1) {
-          assignTargets();
-        } else {
+          db.run('UPDATE game_state SET state = ?', ['ended']);
+        } else if (aliveTeams.length === 0) {
           const channel = client.channels.cache.get(config.channels.status);
           channel.send('The game has ended with no winning team.');
+          db.run('UPDATE game_state SET state = ?', ['ended']);
         }
       });
     }
