@@ -206,7 +206,7 @@ client.on('interactionCreate', async (interaction) => {
       }
   
       if (row.state !== config.game.states.lobby) {
-        return interaction.reply('Player registration is only allowed during the lobby phase.');
+        return interaction.reply('The game has already started. Registration is not allowed at this time.');
       }
   
       db.get('SELECT * FROM players WHERE discord_id = ?', [userId], async (err, row) => {
@@ -253,6 +253,10 @@ client.on('interactionCreate', async (interaction) => {
   
       if (!row) {
         return interaction.reply('You must be registered for the game to create a team.');
+      }
+
+      if (row.team_id) {
+        return interaction.reply('You are already a member of a team. You cannot create a new team.');
       }
   
       const teamName = interaction.options.getString('name');
@@ -347,6 +351,9 @@ client.on('interactionCreate', async (interaction) => {
   }
   
   async function handleTeamLeaving(interaction) {
+    if (!isPlayer(interaction)) {
+      return interaction.reply('Only players can leave a team.');
+    }
     const userId = interaction.user.id;
   
     db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
@@ -432,6 +439,9 @@ client.on('interactionCreate', async (interaction) => {
   }
   
   async function handleOwnershipTransfer(interaction) {
+    if (!isPlayer(interaction)) {
+      return interaction.reply('Only players can transfer team ownership.');
+    }
     const userId = interaction.user.id;
     const newOwnerId = interaction.options.getUser('player').id;
   
@@ -489,6 +499,9 @@ client.on('interactionCreate', async (interaction) => {
   }
   
   async function handlePlayerKick(interaction) {
+    if (!isPlayer(interaction)) {
+      return interaction.reply('Only players can kick other players from a team.');
+    }
     const userId = interaction.user.id;
     const playerId = interaction.options.getUser('player').id;
   
@@ -589,9 +602,11 @@ async function handleGameStart(interaction) {
 }
 
 async function handleAssassinationReport(interaction) {
+
   if (!isPlayer(interaction)) {
     return interaction.reply('Only players can report assassinations.');
   }
+
   db.get('SELECT state FROM game_state', (err, row) => {
     if (err) {
       console.error('Error checking game state:', err);
@@ -677,7 +692,11 @@ async function handleAssassinationReport(interaction) {
   });
 });
 }
-  async function handleDisputeSubmission(interaction) {
+
+async function handleDisputeSubmission(interaction) {
+  if (!isPlayer(interaction)) {
+    return interaction.reply('Only players can submit disputes.');
+  }
     const channel = interaction.guild.channels.cache.get(config.channels.disputes);
     const userId = interaction.user.id;
     const dispute = interaction.options.getString('dispute');
@@ -1092,6 +1111,9 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
   }
   
   async function handleAssassinationButtonInteraction(interaction, assassinationId) {
+    if (!isPlayer(interaction)) {
+      return interaction.reply('Only players can interact with assassination reports.');
+    }
     const [action] = interaction.customId.split('_');
   
     if (action === 'assassinationapprove') {
@@ -1120,7 +1142,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     }
   }
 
-  async function handleAssassinationApproval(interaction) {
+  async function handleAssassinationApproval(interaction, assassinationId, assassinId, targetId) {
     db.serialize(() => {
       db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
         if (err) {
