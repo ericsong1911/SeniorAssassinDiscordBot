@@ -1101,6 +1101,7 @@ client.on('interactionCreate', async (interaction) => {
             });
         });
     } else if (action === 'assassinationreject') {
+        const [assassinationId] = args;
         // Handle assassination rejection
         interaction.update({ content: `The assassination (ID: ${assassinationId}) has been rejected.`, components: [] });
         // Send rejection message to the assassin
