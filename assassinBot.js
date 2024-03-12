@@ -392,7 +392,7 @@ async function approvePlayer(interaction, playerId) {
         
         try {
           const owner = await client.users.fetch(ownerId);
-
+          console.log('Owner var:', owner);
 
   
           const embed = new EmbedBuilder()
