@@ -304,14 +304,14 @@ client.on('interactionCreate', async (interaction) => {
               type: 2,
               style: 3,
               label: 'Approve',
-              custom_id: `join_approve_${playerRow.id}_${teamId}`,
+              custom_id: `joinapprove_${playerRow.id}_${teamId}`,
             };
   
             const rejectButton = {
               type: 2,
               style: 4,
               label: 'Reject',
-              custom_id: `join_reject_${playerRow.id}_${teamId}`,
+              custom_id: `joinreject_${playerRow.id}_${teamId}`,
             };
   
             const actionRow = {
@@ -620,19 +620,19 @@ async function handleAssassinationReport(interaction) {
           .setImage(evidenceImage.url)
           .setFooter({ text: `Assassination ID: ${assassinationId} | Please vote on whether to approve or reject the assassination.` });
   
-        const approveButton = {
-          type: 2,
-          style: 3,
-          label: 'Approve',
-          custom_id: `assassination_approve_${assassinationId}`,
-        };
-  
-        const rejectButton = {
-          type: 2,
-          style: 4,
-          label: 'Reject',
-          custom_id: `assassination_reject_${assassinationId}`,
-        };
+          const approveButton = {
+            type: 2,
+            style: 3,
+            label: 'Approve',
+            custom_id: `assassinationapprove_${assassinationId}`,
+          };
+          
+          const rejectButton = {
+            type: 2,
+            style: 4,
+            label: 'Reject',
+            custom_id: `assassinationreject_${assassinationId}`,
+          };
   
         const actionRow = {
           type: 1,
@@ -990,14 +990,14 @@ client.on('messageCreate', async (message) => {
         type: 2,
         style: 3,
         label: 'Approve',
-        custom_id: `assassination_approve_${message.id}`,
+        custom_id: `assassinationapprove_${message.id}`,
       };
 
       const rejectButton = {
         type: 2,
         style: 4,
         label: 'Reject',
-        custom_id: `assassination_reject_${message.id}`,
+        custom_id: `assassinationreject_${message.id}`,
       };
 
       const actionRow = {
@@ -1015,8 +1015,8 @@ client.on('interactionCreate', async (interaction) => {
   
     const [prefix, action, playerId, teamId] = interaction.customId.split('_');
 
-    if (prefix === 'join') {
-        if (action === 'approve') {
+    // if (prefix === 'join') {
+        if (action === 'joinapprove') {
             db.run('UPDATE players SET team_id = ? WHERE id = ?', [teamId, playerId], (err) => {
             if (err) {
                 console.error('Error updating player team:', err);
@@ -1033,7 +1033,7 @@ client.on('interactionCreate', async (interaction) => {
                 console.error('Error sending approval message to player:', err);
                 });
             });
-        } else if (action === 'reject') {
+        } else if (action === 'join reject') {
             interaction.reply(`Join request has been rejected.`);
             client.users.fetch(playerId)
             .then((player) => {
@@ -1043,8 +1043,9 @@ client.on('interactionCreate', async (interaction) => {
                 console.error('Error sending rejection message to player:', err);
             });
         }
-      } else if (prefix === 'assassination') {
-        if (action === 'approve') {
+    //   } 
+    //   else if (prefix === 'assassination') {
+        else if (action === 'assassinationapprove') {
             db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
               if (err) {
                 console.error('Error updating player status:', err);
@@ -1081,7 +1082,7 @@ client.on('interactionCreate', async (interaction) => {
                   });
               });
             });
-        } else if (action === 'reject') {
+        } else if (action === 'assassinationreject') {
             interaction.update({ content: `The assassination (ID: ${assassinationId}) has been rejected.`, components: [] });
             // Send rejection message to the assassin
             db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
@@ -1097,7 +1098,7 @@ client.on('interactionCreate', async (interaction) => {
             }
             });
         }
-    }
+    // }
   });
 
   function updateGameState() {
