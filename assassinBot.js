@@ -388,12 +388,9 @@ async function approvePlayer(interaction, playerId) {
         }
   
         const ownerId = teamRow.owner_id;
-        console.log('Owner ID:', ownerId);
-        
+                
         try {
-          const owner = await client.users.fetch(ownerId);
-          console.log('Owner var:', owner);
-
+          const owner = client.users.fetch(ownerId);
   
           const embed = new EmbedBuilder()
             .setTitle('Team Join Request')
