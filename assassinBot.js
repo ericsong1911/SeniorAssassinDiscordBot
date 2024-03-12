@@ -1224,129 +1224,184 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     }
   });
 
-  function updateGameState() {
+  function endGame() {
+    db.run('UPDATE game_state SET state = ?', ['ended'], (err) => {
+      if (err) {
+        console.error('Error updating game state:', err);
+        return;
+      }
+  
+      const channel = client.channels.cache.get(config.channels.status);
+      channel.send('The game has ended.');
+    });
+  }
+  
+  function determineWinner() {
+    return new Promise((resolve, reject) => {
+      db.all('SELECT t.id, t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC', (err, rows) => {
+        if (err) {
+          console.error('Error fetching team standings:', err);
+          reject(err);
+        } else {
+          if (rows.length === 1) {
+            resolve(rows[0]);
+          } else if (rows.length > 1) {
+            const tiedTeams = rows.filter((row) => row.kills === rows[0].kills);
+            if (tiedTeams.length > 1) {
+              resolve(null);
+            } else {
+              resolve(tiedTeams[0]);
+            }
+          } else {
+            resolve(null);
+          }
+        }
+      });
+    });
+  }
+  
+  function handleSuddenDeath() {
+    return new Promise((resolve, reject) => {
+      db.all('SELECT t.id, t.name AS team_name, COUNT(p.id) AS alive_players FROM teams t LEFT JOIN players p ON t.id = p.team_id AND p.is_alive = 1 GROUP BY t.id', (err, rows) => {
+        if (err) {
+          console.error('Error fetching team standings:', err);
+          reject(err);
+        } else {
+          const aliveTeams = rows.filter((row) => row.alive_players > 0);
+          if (aliveTeams.length === 1) {
+            resolve(aliveTeams[0]);
+          } else {
+            const suddenDeathTeams = aliveTeams.map((team) => team.id);
+            const shuffledTeams = shuffle(suddenDeathTeams);
+  
+            const updateQueries = [];
+            for (let i = 0; i < shuffledTeams.length; i += 2) {
+              const team1 = shuffledTeams[i];
+              const team2 = shuffledTeams[i + 1];
+  
+              if (team2) {
+                updateQueries.push(
+                  new Promise((resolve, reject) => {
+                    db.run('UPDATE teams SET target_id = ? WHERE id = ?', [team2, team1], (err) => {
+                      if (err) {
+                        reject(err);
+                      } else {
+                        resolve();
+                      }
+                    });
+                  })
+                );
+                updateQueries.push(
+                  new Promise((resolve, reject) => {
+                    db.run('UPDATE teams SET target_id = ? WHERE id = ?', [team1, team2], (err) => {
+                      if (err) {
+                        reject(err);
+                      } else {
+                        resolve();
+                      }
+                    });
+                  })
+                );
+              }
+            }
+  
+            Promise.all(updateQueries)
+              .then(() => {
+                const channel = client.channels.cache.get(config.channels.status);
+                channel.send('Sudden death targets have been assigned. The first team to eliminate their target wins!');
+                resolve(null);
+              })
+              .catch((error) => {
+                console.error('Error updating sudden death targets:', error);
+                reject(error);
+              });
+          }
+        }
+      });
+    });
+  }
+  
+  async function updateGameState() {
     const now = new Date();
     const endDate = new Date(config.game.end_date);
   
     if (now >= endDate) {
-      db.run('UPDATE game_state SET state = ?', ['ended'], (err) => {
-        if (err) {
-          console.error('Error updating game state:', err);
-          return;
-        }
-  
-        db.all('SELECT t.id, t.name AS team_name, COUNT(k.id) AS kills FROM teams t LEFT JOIN players p ON t.id = p.team_id LEFT JOIN kills k ON p.id = k.assassin_id GROUP BY t.id ORDER BY kills DESC', (err, rows) => {
-          if (err) {
-            console.error('Error fetching team standings:', err);
-            return;
-          }
-  
-          if (rows.length === 1) {
-            const winningTeam = rows[0];
-            const channel = client.channels.cache.get(config.channels.status);
-            channel.send(`The game has ended! The winning team is ${winningTeam.team_name} with ${winningTeam.kills} kills.`);
-          } else if (rows.length > 1) {
-            const tiedTeams = rows.filter((row) => row.kills === rows[0].kills);
-            if (tiedTeams.length > 1) {
-              const channel = client.channels.cache.get(config.channels.status);
-              channel.send('The game has ended in a tie! Entering sudden death mode.');
-  
-              // Sudden death logic
-              const suddenDeathTeams = tiedTeams.map((team) => team.id);
-              const shuffledTeams = shuffle(suddenDeathTeams);
-  
-              for (let i = 0; i < shuffledTeams.length; i += 2) {
-                const team1 = shuffledTeams[i];
-                const team2 = shuffledTeams[i + 1];
-  
-                if (team2) {
-                  db.run('UPDATE teams SET target_id = ? WHERE id = ?', [team2, team1], (err) => {
-                    if (err) {
-                      console.error('Error updating sudden death target for team', team1, err);
-                    }
-                  });
-  
-                  db.run('UPDATE teams SET target_id = ? WHERE id = ?', [team1, team2], (err) => {
-                    if (err) {
-                      console.error('Error updating sudden death target for team', team2, err);
-                    }
-                  });
-                }
-              }
-  
-              channel.send('Sudden death targets have been assigned. The first team to eliminate their target wins!');
-            } else {
-              const winningTeam = tiedTeams[0];
-              const channel = client.channels.cache.get(config.channels.status);
-              channel.send(`The game has ended! The winning team is ${winningTeam.team_name} with ${winningTeam.kills} kills.`);
-            }
-          } else {
-            const channel = client.channels.cache.get(config.channels.status);
-            channel.send('The game has ended with no winning team.');
-          }
-        });
-      });
-    }
-    db.all('SELECT t.id, t.name AS team_name, COUNT(p.id) AS alive_players FROM teams t LEFT JOIN players p ON t.id = p.team_id AND p.is_alive = 1 GROUP BY t.id', (err, rows) => {
-        if (err) {
-          console.error('Error fetching team standings:', err);
-          return;
-        }
-    
-        const aliveTeams = rows.filter((row) => row.alive_players > 0);
-    
-        if (aliveTeams.length === 1) {
-          const winningTeam = aliveTeams[0];
+      endGame();
+    } else {
+      try {
+        const winner = await determineWinner();
+        if (winner) {
           const channel = client.channels.cache.get(config.channels.status);
-          channel.send(`The game has ended! The winning team is ${winningTeam.team_name}.`);
-          db.run('UPDATE game_state SET state = ?', ['ended']);
-        } else if (aliveTeams.length === 0) {
-          const channel = client.channels.cache.get(config.channels.status);
-          channel.send('The game has ended with no winning team.');
-          db.run('UPDATE game_state SET state = ?', ['ended']);
+          channel.send(`The game has ended! The winning team is ${winner.team_name} with ${winner.kills} kills.`);
+          endGame();
+        } else {
+          const suddenDeathWinner = await handleSuddenDeath();
+          if (suddenDeathWinner) {
+            const channel = client.channels.cache.get(config.channels.status);
+            channel.send(`The game has ended! The winning team is ${suddenDeathWinner.team_name}.`);
+            endGame();
+          }
         }
-      });
+      } catch (error) {
+        console.error('Error updating game state:', error);
+      }
     }
+  }
 
   function assignTargets() {
-    db.all('SELECT * FROM teams', (err, rows) => {
+    db.all('SELECT * FROM teams', (err, teams) => {
       if (err) {
         console.error('Error fetching teams:', err);
         return;
       }
   
-      const teamIds = rows.map((row) => row.id);
+      const teamIds = teams.map((team) => team.id);
       const shuffledTeamIds = shuffle(teamIds);
   
+      const targetAssignments = {};
       for (let i = 0; i < shuffledTeamIds.length; i++) {
         const teamId = shuffledTeamIds[i];
         const targetId = shuffledTeamIds[(i + 1) % shuffledTeamIds.length];
+        targetAssignments[teamId] = targetId;
+      }
   
-        db.run('UPDATE teams SET target_id = ? WHERE id = ?', [targetId, teamId], (err) => {
-          if (err) {
-            console.error('Error updating team target:', err);
-          } else {
-            // Send DMs to the team members with their assigned target
-            db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
-              if (!err && players) {
-                players.forEach((player) => {
-                  client.users.fetch(player.discord_id)
-                    .then((user) => {
-                      db.get('SELECT * FROM teams WHERE id = ?', [targetId], (err, targetTeam) => {
-                        if (!err && targetTeam) {
-                          user.send(`Your team's target is: ${targetTeam.name}`);
-                        }
-                      });
-                    })
-                    .catch((err) => {
-                      console.error('Error sending target DM to player:', err);
+      const updateQueries = Object.entries(targetAssignments).map(([teamId, targetId]) => {
+        return new Promise((resolve, reject) => {
+          db.run('UPDATE teams SET target_id = ? WHERE id = ?', [targetId, teamId], (err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+        });
+      });
+  
+      Promise.all(updateQueries)
+        .then(() => {
+          console.log('Targets assigned successfully');
+          // Send DMs to players with their assigned targets
+          db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
+            if (!err && players) {
+              players.forEach((player) => {
+                client.users.fetch(player.discord_id)
+                  .then((user) => {
+                    db.get('SELECT * FROM teams WHERE id = ?', [targetId], (err, targetTeam) => {
+                      if (!err && targetTeam) {
+                        user.send(`Your team's target is: ${targetTeam.name}`);
+                      }
                     });
+                  })
+                  .catch((err) => {
+                    console.error('Error sending target DM to player:', err);
+                  });
                 });
               }
             });
-          }
+        })
+        .catch((error) => {
+          console.error('Error updating team targets:', error);
         });
-      }
     });
   }
 
