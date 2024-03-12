@@ -909,6 +909,7 @@ async function displayHelp(interaction) {
         const statusChannel = client.channels.cache.get(config.channels.status);
         statusChannel.send(`Player ${targetRow.name} from team ${targetTeam.name} has been eliminated!`);
         updateLeaderboard();
+        updateGameState();
       });
     });
   }
@@ -940,6 +941,7 @@ async function displayHelp(interaction) {
   
         interaction.reply(`Player with ID ${playerId} has been revived in the game.`);
         updateLeaderboard();
+        updateGameState();
       });
     });
   }
@@ -1160,6 +1162,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
   
           interaction.update({ content: `The assassination (ID: ${assassinationId}) has been approved.`, components: [] });
           updateLeaderboard();
+          updateGameState();
   
           // Check if the target team has been eliminated
           db.get('SELECT * FROM players WHERE discord_id = ?', [targetId], (err, targetRow) => {
@@ -1322,13 +1325,13 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
   }
   
   async function updateGameState() {
-    const now = new Date();
-    const endDate = new Date(config.game.end_date);
+    try {
+      const now = new Date();
+      const endDate = new Date(config.game.end_date);
   
-    if (now >= endDate) {
-      endGame();
-    } else {
-      try {
+      if (now >= endDate) {
+        endGame();
+      } else {
         const winner = await determineWinner();
         if (winner) {
           const channel = client.channels.cache.get(config.channels.status);
@@ -1342,9 +1345,9 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
             endGame();
           }
         }
-      } catch (error) {
-        console.error('Error updating game state:', error);
       }
+    } catch (error) {
+      console.error('Error updating game state:', error);
     }
   }
 
@@ -1441,12 +1444,6 @@ function updateLeaderboard() {
 
 function isPlayer(interaction) {
   return interaction.member.roles.cache.has(config.roles.player);
-}
-
-function startGameLoop() {
-  setInterval(() => {
-    updateGameState();
-  }, 60000);
 }
 
 client.login(config.bot.token);
