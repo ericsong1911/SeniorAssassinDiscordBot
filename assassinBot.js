@@ -1040,7 +1040,9 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     }
   }
   
-  async function handleAssassinationButtonInteraction(interaction, action, assassinationId) {
+  async function handleAssassinationButtonInteraction(interaction, assassinationId) {
+    const [action] = interaction.customId.split('_');
+  
     if (action === 'assassinationapprove') {
       // Retrieve the assassin and target IDs from the database
       db.get('SELECT assassin_id, target_id FROM assassinations WHERE id = ?', [assassinationId], async (err, row) => {
@@ -1144,7 +1146,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
       await handleJoinButtonInteraction(interaction, action, playerId, teamId);
     } else if (action === 'assassinationapprove' || action === 'assassinationreject') {
       const [assassinationId] = args;
-      await handleAssassinationButtonInteraction(interaction, action, assassinationId);
+      await handleAssassinationButtonInteraction(interaction, assassinationId);
     }
   });
 
