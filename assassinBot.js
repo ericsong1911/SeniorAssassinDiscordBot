@@ -1013,7 +1013,7 @@ client.on('messageCreate', async (message) => {
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
   
-    const [prefix, action, playerId, teamId] = interaction.customId.split('_');
+    const [action, playerId, teamId] = interaction.customId.split('_');
 
     // if (prefix === 'join') {
         if (action === 'joinapprove') {
