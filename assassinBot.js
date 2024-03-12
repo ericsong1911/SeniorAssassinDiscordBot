@@ -401,14 +401,14 @@ async function approvePlayer(interaction, playerId) {
             type: 2,
             style: 3,
             label: 'Approve',
-            custom_id: `joinapprove_${playerRow.id}_${teamId}`,
+            custom_id: `joinapprove_${playerRow.discord_id}_${teamId}`,
           };
   
           const rejectButton = {
             type: 2,
             style: 4,
             label: 'Reject',
-            custom_id: `joinreject_${playerRow.id}_${teamId}`,
+            custom_id: `joinreject_${playerRow.discord_id}_${teamId}`,
           };
   
           const actionRow = {
@@ -1180,6 +1180,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     } else if (action === 'joinreject') {
       interaction.reply(`Join request has been rejected.`);
       client.users.fetch(BigInt(playerId).toString())
+
         .then((player) => {
           player.send(`Your request to join the team has been rejected.`);
         })
