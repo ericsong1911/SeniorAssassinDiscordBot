@@ -1033,7 +1033,7 @@ client.on('interactionCreate', async (interaction) => {
                 console.error('Error sending approval message to player:', err);
                 });
             });
-        } else if (action === 'join reject') {
+        } else if (action === 'joinreject') {
             interaction.reply(`Join request has been rejected.`);
             client.users.fetch(playerId)
             .then((player) => {
