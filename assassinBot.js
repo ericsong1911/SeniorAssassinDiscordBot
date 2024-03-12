@@ -624,14 +624,14 @@ async function handleAssassinationReport(interaction) {
           type: 2,
           style: 3,
           label: 'Approve',
-          custom_id: `approve_assassination_${assassinationId}`,
+          custom_id: `assassination_approve_${assassinationId}`,
         };
   
         const rejectButton = {
           type: 2,
           style: 4,
           label: 'Reject',
-          custom_id: `reject_assassination_${assassinationId}`,
+          custom_id: `assassination_reject_${assassinationId}`,
         };
   
         const actionRow = {
