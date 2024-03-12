@@ -388,6 +388,7 @@ async function approvePlayer(interaction, playerId) {
         }
   
         const ownerId = teamRow.owner_id;
+        console.log('Owner ID:', ownerId);
 
         try {
           const owner = client.users.fetch(String(ownerId));
@@ -395,7 +396,7 @@ async function approvePlayer(interaction, playerId) {
           const embed = new EmbedBuilder()
             .setTitle('Team Join Request')
             .setDescription(`${interaction.user.username} has requested to join your team "${teamRow.name}".`)
-            .setFooter('Please use the buttons below to approve or reject the request.');
+            .setFooter({ text: 'Please use the buttons below to approve or reject the request.' });
   
           const approveButton = {
             type: 2,
