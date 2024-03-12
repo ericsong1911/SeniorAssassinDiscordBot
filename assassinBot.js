@@ -958,57 +958,57 @@ async function displayHelp(interaction) {
     });
   }
 
-// client.on('messageCreate', async (message) => {
-//   if (message.author.bot) return;
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
 
-//   if (message.channel.id === config.channels.voting) {
-//     if (message.attachments.size === 0) {
-//       await message.delete();
-//       return;
-//     }
+  if (message.channel.id === config.channels.voting) {
+    if (message.attachments.size === 0) {
+      await message.delete();
+      return;
+    }
 
-//     const attachment = message.attachments.first();
-//     const assassination = {
-//       assassin_id: message.author.id,
-//       target_id: null,
-//       evidence_url: attachment.url,
-//     };
+    const attachment = message.attachments.first();
+    const assassination = {
+      assassin_id: message.author.id,
+      target_id: null,
+      evidence_url: attachment.url,
+    };
 
-//     db.run('INSERT INTO assassinations (assassin_id, evidence_url) VALUES (?, ?)', [assassination.assassin_id, assassination.evidence_url], (err) => {
-//       if (err) {
-//         console.error('Error inserting assassination:', err);
-//         return message.reply('An error occurred while processing the assassination. Please try again later.');
-//       }
+    db.run('INSERT INTO assassinations (assassin_id, evidence_url) VALUES (?, ?)', [assassination.assassin_id, assassination.evidence_url], (err) => {
+      if (err) {
+        console.error('Error inserting assassination:', err);
+        return message.reply('An error occurred while processing the assassination. Please try again later.');
+      }
 
-//       const embed = new EmbedBuilder()
-//         .setTitle('Assassination Evidence')
-//         .setDescription(`Submitted by: ${message.author.username}`)
-//         .setImage(attachment.url)
-//         .setFooter('Please vote on whether to approve or reject the assassination.');
+      const embed = new EmbedBuilder()
+        .setTitle('Assassination Evidence')
+        .setDescription(`Submitted by: ${message.author.username}`)
+        .setImage(attachment.url)
+        .setFooter('Please vote on whether to approve or reject the assassination.');
 
-//       const approveButton = {
-//         type: 2,
-//         style: 3,
-//         label: 'Approve',
-//         custom_id: `approve_assassination_${message.id}`,
-//       };
+      const approveButton = {
+        type: 2,
+        style: 3,
+        label: 'Approve',
+        custom_id: `assassination_approve_${message.id}`,
+      };
 
-//       const rejectButton = {
-//         type: 2,
-//         style: 4,
-//         label: 'Reject',
-//         custom_id: `reject_assassination_${message.id}`,
-//       };
+      const rejectButton = {
+        type: 2,
+        style: 4,
+        label: 'Reject',
+        custom_id: `assassination_reject_${message.id}`,
+      };
 
-//       const actionRow = {
-//         type: 1,
-//         components: [approveButton, rejectButton],
-//       };
+      const actionRow = {
+        type: 1,
+        components: [approveButton, rejectButton],
+      };
 
-//       message.reply({ embeds: [embed], components: [actionRow] });
-//     });
-//   }
-// });
+      message.reply({ embeds: [embed], components: [actionRow] });
+    });
+  }
+});
 
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
