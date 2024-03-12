@@ -51,6 +51,14 @@ function initializeDatabase() {
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS assassinations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assassin_id TEXT,
+    target_id TEXT,
+    evidence_url TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Create the game_state table
   db.run(`CREATE TABLE IF NOT EXISTS game_state (
     state TEXT DEFAULT 'lobby'
