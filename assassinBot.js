@@ -1046,11 +1046,26 @@ client.on('interactionCreate', async (interaction) => {
     //   } 
     //   else if (prefix === 'assassination') {
         else if (action === 'assassinationapprove') {
-            db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
-              if (err) {
-                console.error('Error updating player status:', err);
+            // Retrieve the assassin and target IDs from the database
+            db.get('SELECT assassin_id, target_id FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
+                if (err) {
+                console.error('Error fetching assassination data:', err);
                 return interaction.reply('An error occurred while processing the assassination. Please try again later.');
-              }
+                }
+
+                if (!row) {
+                return interaction.reply('The specified assassination does not exist.');
+                }
+
+                const assassinId = row.assassin_id;
+                const targetId = row.target_id;
+
+                // Handle assassination approval
+                db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
+                if (err) {
+                    console.error('Error updating player status:', err);
+                    return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+                }
           
               db.run('INSERT INTO kills (assassin_id, target_id) VALUES (?, ?)', [assassinId, targetId], (err) => {
                 if (err) {
@@ -1082,25 +1097,25 @@ client.on('interactionCreate', async (interaction) => {
                   });
               });
             });
+        });
         } else if (action === 'assassinationreject') {
+            // Handle assassination rejection
             interaction.update({ content: `The assassination (ID: ${assassinationId}) has been rejected.`, components: [] });
             // Send rejection message to the assassin
-            db.get('SELECT * FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
-            if (!err && row) {
+            db.get('SELECT assassin_id FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
+                if (!err && row) {
                 const assassinId = row.assassin_id;
                 client.users.fetch(assassinId)
-                .then((assassin) => {
+                    .then((assassin) => {
                     assassin.send(`Your assassination (ID: ${assassinationId}) has been rejected.`);
-                })
-                .catch((err) => {
+                    })
+                    .catch((err) => {
                     console.error('Error sending rejection message to assassin:', err);
-                });
-            }
-            });
+                    });
         }
-    // }
-  });
-
+      });
+    }
+});
   function updateGameState() {
     const now = new Date();
     const endDate = new Date(config.game.end_date);
