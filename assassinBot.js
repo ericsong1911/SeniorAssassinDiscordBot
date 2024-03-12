@@ -222,23 +222,98 @@ client.on('interactionCreate', async (interaction) => {
         const name = interaction.user.username;
   
         db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId, name], async function (err) {
-          if (err) {
-            console.error('Error registering player:', err);
-            return interaction.reply('An error occurred while registering. Please try again later.');
-          }
-  
-          const playerId = this.lastID;
-  
-          try {
-            const playerRole = interaction.guild.roles.cache.get(config.roles.player);
-            await interaction.member.roles.add(playerRole);
-            interaction.reply(`You have been successfully registered for the game and assigned the player role! Your player ID is: ${playerId}`);
-          } catch (error) {
-            console.error('Error assigning player role:', error);
-            interaction.reply('You have been successfully registered for the game, but there was an error assigning the player role. Please contact an admin.');
-          }
+            if (err) {
+              console.error('Error registering player:', err);
+              return interaction.reply('An error occurred while registering. Please try again later.');
+            }
+        
+            const playerId = this.lastID;
+        
+            if (config.game.allow_manual_approval) {
+              const gameManagerRole = interaction.guild.roles.cache.get(config.roles.game_manager);
+              const gameManagers = interaction.guild.members.cache.filter((member) => member.roles.cache.has(gameManagerRole.id));
+        
+              const embed = new EmbedBuilder()
+                .setTitle('New Player Registration')
+                .setDescription(`${interaction.user.username} has requested to join the game.`)
+                .addFields(
+                  { name: 'Player ID', value: playerId.toString() },
+                  { name: 'Discord ID', value: userId }
+                )
+                .setTimestamp();
+        
+              const approveButton = new ButtonBuilder()
+                .setCustomId(`approvePlayer_${playerId}`)
+                .setLabel('Approve')
+                .setStyle(ButtonStyle.Success);
+        
+              const rejectButton = new ButtonBuilder()
+                .setCustomId(`rejectPlayer_${playerId}`)
+                .setLabel('Reject')
+                .setStyle(ButtonStyle.Danger);
+        
+              const actionRow = new ActionRowBuilder()
+                .addComponents(approveButton, rejectButton);
+        
+              gameManagers.forEach((manager) => {
+                manager.send({ embeds: [embed], components: [actionRow] });
+              });
+        
+              interaction.reply('Your registration request has been submitted for manual approval. Please wait for a game manager to review your request.');
+            } else {
+              try {
+                const playerRole = interaction.guild.roles.cache.get(config.roles.player);
+                await interaction.member.roles.add(playerRole);
+                interaction.reply(`You have been successfully registered for the game and assigned the player role! Your player ID is: ${playerId}`);
+              } catch (error) {
+                console.error('Error assigning player role:', error);
+                interaction.reply('You have been successfully registered for the game, but there was an error assigning the player role. Please contact an admin.');
+              }
+            }
+          });
         });
-      });
+    }
+);}
+
+async function approvePlayer(interaction, playerId) {
+    if (!isGameManager(interaction)) {
+      return interaction.reply('Only game managers can approve player registration requests.');
+    }
+  
+    db.get('SELECT * FROM players WHERE id = ?', [playerId], async (err, row) => {
+      if (err) {
+        console.error('Error fetching player:', err);
+        return interaction.reply('An error occurred while approving the player. Please try again later.');
+      }
+  
+      if (!row) {
+        return interaction.reply('The specified player does not exist.');
+      }
+  
+      try {
+        const playerRole = interaction.guild.roles.cache.get(config.roles.player);
+        const member = await interaction.guild.members.fetch(row.discord_id);
+        await member.roles.add(playerRole);
+        interaction.reply(`Player with ID ${playerId} has been approved and assigned the player role.`);
+      } catch (error) {
+        console.error('Error assigning player role:', error);
+        interaction.reply('An error occurred while approving the player. Please try again later.');
+      }
+    });
+  }
+  
+  async function rejectPlayer(interaction, playerId) {
+    if (!isGameManager(interaction)) {
+      return interaction.reply('Only game managers can reject player registration requests.');
+    }
+  
+    db.run('DELETE FROM players WHERE id = ?', [playerId], (err) => {
+      if (err) {
+        console.error('Error rejecting player:', err);
+        return interaction.reply('An error occurred while rejecting the player. Please try again later.');
+      }
+  
+      interaction.reply(`Player with ID ${playerId} has been rejected.`);
     });
   }
   
@@ -295,7 +370,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.reply('You must be registered for the game to join a team.');
       }
   
-      db.get('SELECT * FROM teams WHERE id = ?', [teamId], (err, teamRow) => {
+      db.get('SELECT * FROM teams WHERE id = ?', [teamId], async (err, teamRow) => {
         if (err) {
           console.error('Error checking team:', err);
           return interaction.reply('An error occurred while joining a team. Please try again later.');
@@ -311,41 +386,40 @@ client.on('interactionCreate', async (interaction) => {
   
         const ownerId = teamRow.owner_id;
   
-        interaction.reply(`Your request to join team "${teamRow.name}" has been sent to the team owner.`);
+        try {
+          const owner = await client.users.fetch(ownerId);
   
-        // Send a join request message to the team owner
-        client.users.fetch(ownerId)
-          .then((owner) => {
-            const embed = new EmbedBuilder()
-              .setTitle('Team Join Request')
-              .setDescription(`${interaction.user.username} has requested to join your team "${teamRow.name}".`)
-              .setFooter('Please use the buttons below to approve or reject the request.');
+          const embed = new EmbedBuilder()
+            .setTitle('Team Join Request')
+            .setDescription(`${interaction.user.username} has requested to join your team "${teamRow.name}".`)
+            .setFooter('Please use the buttons below to approve or reject the request.');
   
-            const approveButton = {
-              type: 2,
-              style: 3,
-              label: 'Approve',
-              custom_id: `joinapprove_${playerRow.id}_${teamId}`,
-            };
+          const approveButton = {
+            type: 2,
+            style: 3,
+            label: 'Approve',
+            custom_id: `joinapprove_${playerRow.id}_${teamId}`,
+          };
   
-            const rejectButton = {
-              type: 2,
-              style: 4,
-              label: 'Reject',
-              custom_id: `joinreject_${playerRow.id}_${teamId}`,
-            };
+          const rejectButton = {
+            type: 2,
+            style: 4,
+            label: 'Reject',
+            custom_id: `joinreject_${playerRow.id}_${teamId}`,
+          };
   
-            const actionRow = {
-              type: 1,
-              components: [approveButton, rejectButton],
-            };
+          const actionRow = {
+            type: 1,
+            components: [approveButton, rejectButton],
+          };
   
-            owner.send({ embeds: [embed], components: [actionRow] });
-          })
-          .catch((err) => {
-            console.error('Error sending join request to team owner:', err);
-            interaction.followUp('An error occurred while sending the join request to the team owner. Please try again later.');
-          });
+          await owner.send({ embeds: [embed], components: [actionRow] });
+  
+          await interaction.reply(`Your request to join team "${teamRow.name}" has been sent to the team owner.`);
+        } catch (error) {
+          console.error('Error sending join request to team owner:', error);
+          await interaction.reply('An error occurred while sending the join request to the team owner. Please try again later.');
+        }
       });
     });
   }
@@ -1224,6 +1298,13 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     } else if (action === 'assassinationapprove' || action === 'assassinationreject') {
       const [assassinationId] = args;
       await handleAssassinationButtonInteraction(interaction, assassinationId);
+    }
+    else if (action === 'approvePlayer') {
+        const [playerId] = args;
+        await approvePlayer(interaction, playerId);
+    } else if (action === 'rejectPlayer') {
+        const [playerId] = args;
+        await rejectPlayer(interaction, playerId);
     }
   });
 
