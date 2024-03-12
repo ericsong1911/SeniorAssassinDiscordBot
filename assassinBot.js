@@ -392,6 +392,7 @@ async function approvePlayer(interaction, playerId) {
 
         try {
           const owner = client.users.fetch(ownerId.toString());
+          const dmChannel = await owner.createDM();
   
           const embed = new EmbedBuilder()
             .setTitle('Team Join Request')
@@ -417,7 +418,7 @@ async function approvePlayer(interaction, playerId) {
             components: [approveButton, rejectButton],
           };
   
-          await owner.send({ embeds: [embed], components: [actionRow] });
+          await dmChannel.send({ embeds: [embed], components: [actionRow] });
   
           await interaction.reply(`Your request to join team "${teamRow.name}" has been sent to the team owner.`);
         } catch (error) {
