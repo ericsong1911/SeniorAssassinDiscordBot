@@ -337,7 +337,7 @@ async function approvePlayer(interaction, playerId) {
       }
   
       const teamName = interaction.options.getString('name');
-      const ownerId = row.id;
+      const ownerId = row.discord_id;
   
       db.run('INSERT INTO teams (name, owner_id) VALUES (?, ?)', [teamName, ownerId], function(err) {
         if (err) {
