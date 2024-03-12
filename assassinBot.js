@@ -51,7 +51,7 @@ function initializeDatabase() {
   db.run(`CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
-    owner_id STRING,
+    owner_id INTEGER,
     FOREIGN KEY (owner_id) REFERENCES players (id)
   )`);
 
@@ -223,7 +223,7 @@ client.on('interactionCreate', async (interaction) => {
   
         const name = interaction.user.username;
   
-        db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId, name], async function (err) {
+        db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId.toString(), name], async function (err) {
             if (err) {
               console.error('Error registering player:', err);
               return interaction.reply('An error occurred while registering. Please try again later.');
