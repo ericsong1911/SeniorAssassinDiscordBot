@@ -11,6 +11,11 @@ game:
   min_team_count: 2
   time_limit_enabled: true
   time_limit_duration: 72 # hours
+  voting_time_limit: 24
+  states:
+    lobby: 'lobby'
+    active: 'active'
+    ended: 'ended'
 
 channels:
   guild_id: YOUR_GUILD_ID
@@ -21,6 +26,7 @@ channels:
 
 roles:
   game_manager: GAME_MANAGER_ROLE_ID
+  player: PLAYER_ROLE_ID
 
 cooldowns:
   command_cooldown: 5 # seconds

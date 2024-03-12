@@ -31,17 +31,15 @@ function initializeDatabase() {
     discord_id TEXT UNIQUE,
     name TEXT,
     team_id INTEGER,
-    is_alive BOOLEAN DEFAULT 1,
+    is_alive INTEGER DEFAULT 1,
     FOREIGN KEY (team_id) REFERENCES teams (id)
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS teams (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     owner_id INTEGER,
-    target_id INTEGER,
-    FOREIGN KEY (owner_id) REFERENCES players (id),
-    FOREIGN KEY (target_id) REFERENCES teams (id)
+    FOREIGN KEY (owner_id) REFERENCES players (id)
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS disputes (
@@ -201,26 +199,45 @@ client.on('interactionCreate', async (interaction) => {
   async function handlePlayerRegistration(interaction) {
     const userId = interaction.user.id;
   
-    db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, row) => {
+    db.get('SELECT state FROM game_state', async (err, row) => {
       if (err) {
-        console.error('Error checking player registration:', err);
+        console.error('Error checking game state:', err);
         return interaction.reply('An error occurred while registering. Please try again later.');
       }
   
-      if (row) {
-        return interaction.reply('You are already registered for the game.');
+      if (row.state !== config.game.states.lobby) {
+        return interaction.reply('Player registration is only allowed during the lobby phase.');
       }
   
-      const name = interaction.user.username;
-  
-      db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId, name], function(err) {
+      db.get('SELECT * FROM players WHERE discord_id = ?', [userId], async (err, row) => {
         if (err) {
-          console.error('Error registering player:', err);
+          console.error('Error checking player registration:', err);
           return interaction.reply('An error occurred while registering. Please try again later.');
         }
   
-        const playerId = this.lastID;
-        interaction.reply(`You have been successfully registered for the game! Your player ID is: ${playerId}`);
+        if (row) {
+          return interaction.reply('You are already registered for the game.');
+        }
+  
+        const name = interaction.user.username;
+  
+        db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId, name], async function (err) {
+          if (err) {
+            console.error('Error registering player:', err);
+            return interaction.reply('An error occurred while registering. Please try again later.');
+          }
+  
+          const playerId = this.lastID;
+  
+          try {
+            const playerRole = interaction.guild.roles.cache.get(config.roles.player);
+            await interaction.member.roles.add(playerRole);
+            interaction.reply(`You have been successfully registered for the game and assigned the player role! Your player ID is: ${playerId}`);
+          } catch (error) {
+            console.error('Error assigning player role:', error);
+            interaction.reply('You have been successfully registered for the game, but there was an error assigning the player role. Please contact an admin.');
+          }
+        });
       });
     });
   }
@@ -543,108 +560,123 @@ async function handleGameStart(interaction) {
   const userId = interaction.user.id;
   const isAdmin = await isGameManager(interaction);
 
-  db.get('SELECT * FROM players WHERE discord_id = ?', [userId], (err, playerRow) => {
+  if (!isAdmin) {
+    return interaction.reply('You must be an admin to start the game.');
+  }
+
+  db.get('SELECT state FROM game_state', (err, row) => {
     if (err) {
-      console.error('Error checking player:', err);
+      console.error('Error checking game state:', err);
       return interaction.reply('An error occurred while starting the game. Please try again later.');
     }
 
-    if (!isAdmin) {
-      return interaction.reply('You must be an admin to start the game.');
+    if (row.state === config.game.states.active) {
+      return interaction.reply('The game has already started and cannot be started again.');
     }
 
-    db.all('SELECT COUNT(*) as count FROM teams', (err, rows) => {
+    db.run('UPDATE game_state SET state = ?', [config.game.states.active], (err) => {
       if (err) {
-        console.error('Error counting teams:', err);
+        console.error('Error updating game state:', err);
         return interaction.reply('An error occurred while starting the game. Please try again later.');
       }
 
-      const teamCount = rows[0].count;
+      assignTargets();
+      startGameLoop();
 
-      if (teamCount < config.game.min_team_count) {
-        return interaction.reply(`A minimum of ${config.game.min_team_count} teams is required to start the game.`);
-      }
-
-      db.run('UPDATE game_state SET state = ?', ['active'], (err) => {
-        if (err) {
-          console.error('Error updating game state:', err);
-          return interaction.reply('An error occurred while starting the game. Please try again later.');
-        }
-
-        assignTargets();
-        startGameLoop();
-
-        interaction.reply('The game has been started!');
-      });
+      interaction.reply('The game has been started!');
     });
   });
 }
 
 async function handleAssassinationReport(interaction) {
-    const votingChannel = interaction.guild.channels.cache.get(config.channels.voting);
-    const assassinId = interaction.user.id;
-    const target = interaction.options.getUser('target');
-    const evidenceImage = interaction.options.getAttachment('evidence');
-  
-    if (!target) {
-      return interaction.reply('Please provide a valid player to assassinate.');
+  if (!isPlayer(interaction)) {
+    return interaction.reply('Only players can report assassinations.');
+  }
+  db.get('SELECT state FROM game_state', (err, row) => {
+    if (err) {
+      console.error('Error checking game state:', err);
+      return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
     }
-  
-    const targetId = target.id;
-  
-    db.get('SELECT * FROM players WHERE discord_id = ?', [assassinId], (err, assassinRow) => {
+
+    if (row.state !== config.game.states.active) {
+      return interaction.reply('Assassination reports can only be submitted during an active game.');
+    }
+  const votingChannel = interaction.guild.channels.cache.get(config.channels.voting);
+  const assassinId = interaction.user.id;
+  const target = interaction.options.getUser('target');
+  const evidenceImage = interaction.options.getAttachment('evidence');
+
+  if (!target) {
+    return interaction.reply('Please provide a valid player to assassinate.');
+  }
+
+  const targetId = target.id;
+
+  db.get('SELECT * FROM players WHERE discord_id = ?', [assassinId], (err, assassinRow) => {
+    if (err) {
+      console.error('Error checking assassin:', err);
+      return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
+    }
+
+    if (!assassinRow || !assassinRow.is_alive) {
+      return interaction.reply('You must be an alive player to report an assassination.');
+    }
+
+    db.get('SELECT * FROM players WHERE discord_id = ?', [targetId], (err, targetRow) => {
       if (err) {
-        console.error('Error checking assassin:', err);
+        console.error('Error checking target:', err);
         return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
       }
-  
-      if (!assassinRow || !assassinRow.is_alive) {
-        return interaction.reply('You must be an alive player to report an assassination.');
+
+      if (!targetRow || !targetRow.is_alive) {
+        return interaction.reply('The specified target is not an alive player.');
       }
-  
-      db.get('SELECT * FROM players WHERE discord_id = ?', [targetId], (err, targetRow) => {
+
+      db.run('INSERT INTO assassinations (assassin_id, target_id, evidence_url) VALUES (?, ?, ?)', [assassinId, targetId, evidenceImage.url], async function(err) {
         if (err) {
-          console.error('Error checking target:', err);
-          return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
+          console.error('Error inserting assassination:', err);
+          return interaction.reply('An error occurred while processing the assassination. Please try again later.');
         }
-  
-        if (!targetRow || !targetRow.is_alive) {
-          return interaction.reply('The specified target is not an alive player.');
-        }
-  
-        const assassinationId = Math.random().toString(36).substring(7); // Generate a unique assassination ID
-  
+
+        const assassinationId = this.lastID;
         const embed = new EmbedBuilder()
-          .setTitle('Assassination Report')
+          .setTitle('Assassination Evidence')
           .setDescription(`Assassin: ${interaction.user.username}\nTarget: ${target.username}`)
           .setImage(evidenceImage.url)
-          .setFooter({ text: `Assassination ID: ${assassinationId} | Please vote on whether to approve or reject the assassination.` });
-  
-          const approveButton = {
-            type: 2,
-            style: 3,
-            label: 'Approve',
-            custom_id: `assassinationapprove_${assassinationId}`,
-          };
-          
-          const rejectButton = {
-            type: 2,
-            style: 4,
-            label: 'Reject',
-            custom_id: `assassinationreject_${assassinationId}`,
-          };
-  
-        const actionRow = {
-          type: 1,
-          components: [approveButton, rejectButton],
-        };
-  
-        votingChannel.send({ embeds: [embed], components: [actionRow] });
+          .setFooter({ text: `Assassination ID: ${assassinationId}` });
+
+        const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
+
+        const votingMessage = await votingChannel.send({
+          content: 'Assassination reported. Please vote within the time limit.',
+          embeds: [embed],
+        });
+
+        await votingMessage.react('✅');
+        await votingMessage.react('❌');
+
+        const filter = (reaction, user) => ['✅', '❌'].includes(reaction.emoji.name) && !user.bot;
+        const collector = votingMessage.createReactionCollector({ filter, time: votingTimeLimit });
+
+        collector.on('end', (collected) => {
+          const upvotes = collected.get('✅')?.count || 0;
+          const downvotes = collected.get('❌')?.count || 0;
+
+          if (upvotes > downvotes) {
+            interaction.followUp('Assassination approved by majority vote.');
+            handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
+          } else {
+            interaction.followUp('Assassination rejected by majority vote.');
+            handleAssassinationRejection(interaction, assassinationId);
+          }
+        });
+
         interaction.reply('Your assassination report has been submitted for voting.');
       });
     });
+  });
+});
 }
-
   async function handleDisputeSubmission(interaction) {
     const channel = interaction.guild.channels.cache.get(config.channels.disputes);
     const userId = interaction.user.id;
@@ -761,24 +793,43 @@ async function displayPlayerList(interaction) {
 }
 
 async function displayTeamList(interaction) {
-    db.all('SELECT t.id, t.name, p.name AS owner_name, COUNT(p2.id) AS member_count, CASE WHEN COUNT(p2.id) = COUNT(CASE WHEN p2.is_alive = 1 THEN 1 END) THEN "Alive" ELSE "Eliminated" END AS status FROM teams t LEFT JOIN players p ON t.owner_id = p.id LEFT JOIN players p2 ON t.id = p2.team_id GROUP BY t.id', (err, rows) => {
-      if (err) {
-        console.error('Error fetching team list:', err);
-        return interaction.reply('An error occurred while displaying the team list. Please try again later.');
-      }
-  
-      let teamList = 'Team List:\n\n';
-      rows.forEach((row) => {
-        teamList += `ID: ${row.id} | ${row.name} - Owner: ${row.owner_name}, Members: ${row.member_count}, Status: ${row.status}\n`;
-      });
-  
-      const embed = new EmbedBuilder()
-        .setTitle('Assassin Game Team List')
-        .setDescription(teamList);
-  
-      interaction.reply({ embeds: [embed] });
+  db.all(`
+    SELECT 
+      t.id, 
+      t.name, 
+      p.name AS owner_name, 
+      GROUP_CONCAT(p2.name) AS member_names,
+      COUNT(p2.id) AS member_count,
+      CASE 
+        WHEN COUNT(p2.id) = COUNT(CASE WHEN p2.is_alive = 1 THEN 1 END) THEN 'Alive'
+        ELSE 'Eliminated'
+      END AS status
+    FROM teams t
+    LEFT JOIN players p ON t.owner_id = p.id
+    LEFT JOIN players p2 ON t.id = p2.team_id
+    GROUP BY t.id
+  `, (err, rows) => {
+    if (err) {
+      console.error('Error fetching team list:', err);
+      return interaction.reply('An error occurred while displaying the team list. Please try again later.');
+    }
+
+    let teamList = 'Team List:\n\n';
+    rows.forEach((row) => {
+      teamList += `ID: ${row.id} | ${row.name}\n`;
+      teamList += `Owner: ${row.owner_name}\n`;
+      teamList += `Members: ${row.member_names || 'None'}\n`;
+      teamList += `Member Count: ${row.member_count}\n`;
+      teamList += `Status: ${row.status}\n\n`;
     });
-  }
+
+    const embed = new EmbedBuilder()
+      .setTitle('Assassin Game Team List')
+      .setDescription(teamList);
+
+    interaction.reply({ embeds: [embed] });
+  });
+}
 
 async function displayHelp(interaction) {
     const helpMessage = `
@@ -1044,7 +1095,6 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     const [action] = interaction.customId.split('_');
   
     if (action === 'assassinationapprove') {
-      // Retrieve the assassin and target IDs from the database
       db.get('SELECT assassin_id, target_id FROM assassinations WHERE id = ?', [assassinationId], async (err, row) => {
         if (err) {
           console.error('Error fetching assassination data:', err);
@@ -1058,7 +1108,6 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
         const assassinId = row.assassin_id;
         const targetId = row.target_id;
   
-        // Handle assassination approval
         try {
           await handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
         } catch (error) {
@@ -1067,12 +1116,11 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
         }
       });
     } else if (action === 'assassinationreject') {
-      // Handle assassination rejection
       handleAssassinationRejection(interaction, assassinationId);
     }
   }
 
-  async function handleAssassinationApproval(interaction, assassinationId, assassinId, targetId) {
+  async function handleAssassinationApproval(interaction) {
     db.serialize(() => {
       db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
         if (err) {
@@ -1312,6 +1360,10 @@ function updateLeaderboard() {
         console.error('Error fetching leaderboard message:', err);
       });
   });
+}
+
+function isPlayer(interaction) {
+  return interaction.member.roles.cache.has(config.roles.player);
 }
 
 function startGameLoop() {
