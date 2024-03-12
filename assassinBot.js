@@ -819,6 +819,8 @@ async function displayHelp(interaction) {
       /player-list - Display the list of players and their status
       /team-list - Display the list of teams and their information
       /help - Display this help message
+      /eliminate - Eliminate a player from the game (admin only)
+      /revive - Revive a player in the game (admin only)
     `;
   
     const embed = new EmbedBuilder()
