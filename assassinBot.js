@@ -889,43 +889,43 @@ async function displayPlayerList(interaction) {
 }
 
 async function displayTeamList(interaction) {
-  db.all(`
-    SELECT 
-      t.id, 
-      t.name, 
-      p.name AS owner_name, 
-      GROUP_CONCAT(p2.name) AS member_names,
-      COUNT(p2.id) AS member_count,
-      CASE 
-        WHEN COUNT(p2.id) = COUNT(CASE WHEN p2.is_alive = 1 THEN 1 END) THEN 'Alive'
-        ELSE 'Eliminated'
-      END AS status
-    FROM teams t
-    LEFT JOIN players p ON t.owner_id = p.id
-    LEFT JOIN players p2 ON t.id = p2.team_id
-    GROUP BY t.id
-  `, (err, rows) => {
-    if (err) {
-      console.error('Error fetching team list:', err);
-      return interaction.reply('An error occurred while displaying the team list. Please try again later.');
-    }
-
-    let teamList = 'Team List:\n\n';
-    rows.forEach((row) => {
-      teamList += `ID: ${row.id} | ${row.name}\n`;
-      teamList += `Owner: ${row.owner_name}\n`;
-      teamList += `Members: ${row.member_names || 'None'}\n`;
-      teamList += `Member Count: ${row.member_count}\n`;
-      teamList += `Status: ${row.status}\n\n`;
+    db.all(`
+      SELECT 
+        t.id, 
+        t.name, 
+        p.name AS owner_name, 
+        GROUP_CONCAT(p2.name) AS member_names,
+        COUNT(p2.id) AS member_count,
+        CASE 
+          WHEN COUNT(p2.id) = COUNT(CASE WHEN p2.is_alive = 1 THEN 1 END) THEN 'Alive'
+          ELSE 'Eliminated'
+        END AS status
+      FROM teams t
+      LEFT JOIN players p ON t.owner_id = p.discord_id
+      LEFT JOIN players p2 ON t.id = p2.team_id
+      GROUP BY t.id
+    `, (err, rows) => {
+      if (err) {
+        console.error('Error fetching team list:', err);
+        return interaction.reply('An error occurred while displaying the team list. Please try again later.');
+      }
+  
+      let teamList = 'Team List:\n\n';
+      rows.forEach((row) => {
+        teamList += `ID: ${row.id} | ${row.name}\n`;
+        teamList += `Owner: ${row.owner_name || 'N/A'}\n`;
+        teamList += `Members: ${row.member_names || 'None'}\n`;
+        teamList += `Member Count: ${row.member_count}\n`;
+        teamList += `Status: ${row.status}\n\n`;
+      });
+  
+      const embed = new EmbedBuilder()
+        .setTitle('Assassin Game Team List')
+        .setDescription(teamList);
+  
+      interaction.reply({ embeds: [embed] });
     });
-
-    const embed = new EmbedBuilder()
-      .setTitle('Assassin Game Team List')
-      .setDescription(teamList);
-
-    interaction.reply({ embeds: [embed] });
-  });
-}
+  }
 
 async function displayHelp(interaction) {
     const helpMessage = `
