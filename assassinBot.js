@@ -294,7 +294,7 @@ async function approvePlayer(interaction, playerId) {
   
       try {
         const playerRole = interaction.guild.roles.cache.get(config.roles.player);
-        const member = await interaction.guild.members.fetch(row.discord_id);
+        const member = await interaction.guild.members.fetch(BigInt(row.discord_id).toString());
         await member.roles.add(playerRole);
         interaction.reply(`Player with ID ${playerId} has been approved and assigned the player role.`);
       } catch (error) {
@@ -337,7 +337,7 @@ async function approvePlayer(interaction, playerId) {
       }
   
       const teamName = interaction.options.getString('name');
-      const ownerId = row.discord_id;
+      const ownerId = BigInt(row.discord_id).toString();
   
       db.run('INSERT INTO teams (name, owner_id) VALUES (?, ?)', [teamName, ownerId], function(err) {
         if (err) {
@@ -461,14 +461,14 @@ async function approvePlayer(interaction, playerId) {
   
         if (teamRow.owner_id === playerRow.id) {
           // If the player is the team owner, transfer ownership to the next oldest member
-          db.get('SELECT * FROM players WHERE team_id = ? AND id != ? ORDER BY id LIMIT 1', [teamId, playerRow.id], (err, newOwnerRow) => {
+          db.get('SELECT * FROM players WHERE team_id = ? AND discord_id != ? ORDER BY id LIMIT 1', [teamId, userId], (err, newOwnerRow) => {
             if (err) {
               console.error('Error finding new team owner:', err);
               return interaction.reply('An error occurred while leaving the team. Please try again later.');
             }
   
             if (newOwnerRow) {
-              db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [newOwnerRow.id, teamId], (err) => {
+              db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [BigInt(newOwnerRow.discord_id).toString(), teamId], (err) => {
                 if (err) {
                   console.error('Error updating team owner:', err);
                   return interaction.reply('An error occurred while leaving the team. Please try again later.');
@@ -562,7 +562,7 @@ async function approvePlayer(interaction, playerId) {
             return interaction.reply('The specified player is not a member of your team.');
           }
   
-          db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [newOwnerRow.id, teamId], (err) => {
+          db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [BigInt(newOwnerRow.discord_id).toString(), teamId], (err) => {
             if (err) {
               console.error('Error updating team owner:', err);
               return interaction.reply('An error occurred while transferring ownership. Please try again later.');
@@ -1207,8 +1207,8 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
           return interaction.reply('The specified assassination does not exist.');
         }
   
-        const assassinId = row.assassin_id;
-        const targetId = row.target_id;
+        const assassinId = BigInt(row.assassin_id).toString();
+        const targetId = BigInt(row.target_id).toString();
   
         try {
           await handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
@@ -1224,14 +1224,14 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
 
   async function handleAssassinationApproval(interaction, assassinationId, assassinId, targetId) {
     db.serialize(() => {
-      db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [targetId], (err) => {
+        db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [BigInt(targetId).toString()], (err) => {
         if (err) {
           console.error('Error updating player status:', err);
           interaction.reply('An error occurred while processing the assassination. Please try again later.');
           return;
         }
   
-        db.run('INSERT INTO kills (assassin_id, target_id) VALUES (?, ?)', [assassinId, targetId], (err) => {
+        db.run('INSERT INTO kills (assassin_id, target_id) VALUES (?, ?)', [BigInt(assassinId).toString(), BigInt(targetId).toString()], (err) => {
           if (err) {
             console.error('Error inserting kill:', err);
             interaction.reply('An error occurred while processing the assassination. Please try again later.');
@@ -1279,7 +1279,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     // Send rejection message to the assassin
     db.get('SELECT assassin_id FROM assassinations WHERE id = ?', [assassinationId], (err, row) => {
       if (!err && row) {
-        const assassinId = row.assassin_id;
+        const assassinId = BigInt(row.assassin_id).toString();
         client.users.fetch(assassinId)
           .then((assassin) => {
             assassin.send(`Your assassination (ID: ${assassinationId}) has been rejected.`);
