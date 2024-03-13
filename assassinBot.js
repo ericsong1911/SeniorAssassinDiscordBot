@@ -671,36 +671,39 @@ async function isGameManager(interaction) {
 }
 
 async function handleGameStart(interaction) {
-  const userId = interaction.user.id;
-  const isAdmin = await isGameManager(interaction);
-
-  if (!isAdmin) {
-    return interaction.reply('You must be an admin to start the game.');
-  }
-
-  db.get('SELECT state FROM game_state', (err, row) => {
-    if (err) {
-      console.error('Error checking game state:', err);
-      return interaction.reply('An error occurred while starting the game. Please try again later.');
+    const userId = interaction.user.id;
+    const isAdmin = await isGameManager(interaction);
+  
+    if (!isAdmin) {
+      return interaction.reply('You must be an admin to start the game.');
     }
-
-    if (row.state === config.game.states.active) {
-      return interaction.reply('The game has already started and cannot be started again.');
-    }
-
-    db.run('UPDATE game_state SET state = ?', [config.game.states.active], (err) => {
+  
+    db.get('SELECT state FROM game_state', (err, row) => {
       if (err) {
-        console.error('Error updating game state:', err);
+        console.error('Error checking game state:', err);
         return interaction.reply('An error occurred while starting the game. Please try again later.');
       }
-
-      assignTargets();
-      startGameLoop();
-
-      interaction.reply('The game has been started!');
+  
+      if (row.state === config.game.states.active) {
+        return interaction.reply('The game has already started and cannot be started again.');
+      }
+  
+      db.run('UPDATE game_state SET state = ?', [config.game.states.active], (err) => {
+        if (err) {
+          console.error('Error updating game state:', err);
+          return interaction.reply('An error occurred while starting the game. Please try again later.');
+        }
+  
+        assignTargets();
+  
+        // Send a message to the status channel to announce the start of the game
+        const statusChannel = client.channels.cache.get(config.channels.status);
+        statusChannel.send('The game has started! Targets have been assigned to each team. Good luck and have fun!');
+  
+        interaction.reply('The game has been started!');
+      });
     });
-  });
-}
+  }
 
 async function handleAssassinationReport(interaction) {
 
