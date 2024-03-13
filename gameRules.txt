@@ -1,42 +1,60 @@
 This is a default template of some senior assassin rules. Feel free to modify to how you need it!
 
+Here's a more robust set of rules for your Senior Assassin game, with additional clarifications and restrictions to minimize loopholes and disputes:
+
 ##############
 # Game Rules #
 ##############
 
-Game Details  ----------------
+Game Details
+----------------
 - The game is being managed by {MANAGER}.
 - You may send any questions that you have to {EMAIL ADDRESS}.
 - The game is being run by SeniorAssassinDiscordBot.
 - The game will run from:
-    Start: {TIME AND DATE}
-    End: {TIME AND DATE}
+  Start: {TIME AND DATE}
+  End: {TIME AND DATE}
 
-Entrance Rules ---------------
-- To enter, a fee of {FEE} must be paid to {RECEPIENT} via {METHODS} by {TIME AND DATE}.
+Entrance Rules
+---------------
+- To enter, a fee of {FEE} must be paid to {RECIPIENT} via {METHODS} by {TIME AND DATE}.
 - You may form teams up to a size of {SIZE}.
+- All team members must be registered before the registration deadline. No additions or substitutions are allowed after this point.
 
-Weapons Rules ----------------
+Weapons Rules
+----------------
 - Weapons must be foam weapons. Guns will fire foam projectiles, and melee weapons will have the attacking surface made of foam.
 - Kills must be performed in a realistic manner. Throwing bullets at someone WON'T KILL THEM.
-- Any weapons and/or modifications to weapons to cause significant bodily harm are blacklisted and will lead to disqualification.
+- Any weapons and/or modifications to weapons that cause significant bodily harm are blacklisted and will lead to immediate disqualification.
+- Projectiles must be fired from a weapon; manually throwing projectiles is not allowed.
+- Melee weapons must be at least 12 inches in length and have a foam striking surface.
+- All weapons are subject to approval by the game manager before use.
 
-Boundary Rules ---------------
+Boundary Rules
+---------------
 - This game is not to be played on school property or during school-sanctioned events.
-- Assassinations are not allowed at workplaces, volunteering organizations, extracurriculars, nor houses of worship.
-- You are not allowed to tresspass. Access to private property may only be granted by someone who has authority over said property. This includes but is not limited to owners, family members, and so on.
-- Operation of a motor vehicle by the victim makes them immune to assassination. This is for safety purposes, no one wants to be shot while driving.
+- Assassinations are not allowed at workplaces, volunteering organizations, extracurriculars, houses of worship, or any other location where the participants' presence is required or expected.
+- You are not allowed to trespass. Access to private property may only be granted by someone who has clear authority over said property. This includes but is not limited to owners, tenants, and immediate family members.
+- Operation of a motor vehicle by the victim makes them immune to assassination. This includes being inside or on the vehicle, as well as entering or exiting it.
+- Assassinations are not allowed in any public space where a realistic-looking weapon may cause alarm or result in law enforcement involvement.
 
-Assassination Rules ----------
-- All assassins will recieve a team target. 
-- Your target must be hit by a projectile that was launched by a weapon or by a sizable melee weapon to be counted as an assassination.
-- Targets may use self-defense against their assassin. If an assassin is hit by their target, the target is safe from assassination until midnight the next day.
-- To report an assassination, photographic evidence with the target must be given.
+Assassination Rules
+----------
+- All assassins will receive a team target at the start of the game.
+- Your target must be hit by a projectile that was launched by an approved weapon or by a sizable approved melee weapon to be counted as an assassination.
+- Targets may use self-defense against their assassin. If an assassin is hit by their target's approved weapon, the target is safe from assassination until midnight the next day.
+- To report an assassination, clear photographic or video evidence of the target being hit must be provided to the game manager within 24 hours.
+- Assassins are not allowed to impersonate law enforcement, emergency personnel, or any other authority figure in the course of the game.
 
-Winners ----------------------
-- The last team standing will be declared the winner. If multiple teams are still alive, the winner is the team with the most eliminations.
-- Tie breakers are done through sudden death. One member of your team getting assassinated during a tiebreaker results in the victory of the other team.
+Winners
+----------------------
+- The last team standing will be declared the winner.
+- If multiple teams are still alive at the end of the game, the winner is the team with the most confirmed eliminations.
+- In the event of a tie, a sudden death round will be held at a time and location determined by the game manager. One member of a team being assassinated during sudden death results in the victory of the other team(s).
 
-Disputes ---------------------
-- Any deviation to the rules must be reported to the game manager.
-- Rule breakers will be disqualified.
+Disputes
+---------------------
+- Any suspected deviation from the rules must be reported to the game manager immediately.
+- Rule breakers will be disqualified after investigation by the game manager.
+- The game manager's decisions are final in all disputes.
+- Participants agree to abide by the spirit of the rules as well as the letter. Attempting to exploit loopholes or engage in unsportsmanlike conduct will be grounds for disqualification at the game manager's discretion.
