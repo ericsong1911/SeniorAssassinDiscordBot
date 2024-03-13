@@ -151,6 +151,18 @@ client.on('interactionCreate', async (interaction) => {
           return interaction.reply('This command is not available during the lobby phase.');
         }
       }
+
+      if (gameState !== 'lobby') {
+        if (
+          commandName === 'create-team' ||
+          commandName === 'join-team' ||
+          commandName === 'leave-team' ||
+          commandName === 'transfer-ownership' ||
+          commandName === 'kick-player'
+        ) {
+          return interaction.reply('This command is not available once the game has started.');
+        }
+      }
   
     if (commandName === 'join') {
       await handlePlayerRegistration(interaction);
@@ -484,17 +496,29 @@ async function approvePlayer(interaction, playerId) {
               });
             } else {
               // If there are no other team members, delete the team
-              db.run('DELETE FROM teams WHERE id = ?', [teamId], (err) => {
+              db.run('UPDATE players SET team_id = NULL WHERE id = ?', [playerRow.id], (err) => {
                 if (err) {
-                  console.error('Error deleting team:', err);
+                  console.error('Error removing player from team:', err);
                   return interaction.reply('An error occurred while leaving the team. Please try again later.');
                 }
-  
-                interaction.reply(`You have left the team and the team has been disbanded.`);
-  
-                db.run('UPDATE players SET team_id = NULL WHERE id = ?', [playerRow.id], (err) => {
+            
+                db.get('SELECT COUNT(*) AS count FROM players WHERE team_id = ?', [teamId], (err, row) => {
                   if (err) {
-                    console.error('Error removing player from team:', err);
+                    console.error('Error checking team members:', err);
+                    return interaction.reply('An error occurred while leaving the team. Please try again later.');
+                  }
+            
+                  if (row.count === 0) {
+                    db.run('DELETE FROM teams WHERE id = ?', [teamId], (err) => {
+                      if (err) {
+                        console.error('Error deleting team:', err);
+                        return interaction.reply('An error occurred while leaving the team. Please try again later.');
+                      }
+            
+                      interaction.reply(`You have left the team and the team has been disbanded.`);
+                    });
+                  } else {
+                    interaction.reply(`You have left the team.`);
                   }
                 });
               });
@@ -904,28 +928,29 @@ async function displayTeamList(interaction) {
       LEFT JOIN players p ON t.owner_id = p.discord_id
       LEFT JOIN players p2 ON t.id = p2.team_id
       GROUP BY t.id
-    `, (err, rows) => {
-      if (err) {
-        console.error('Error fetching team list:', err);
-        return interaction.reply('An error occurred while displaying the team list. Please try again later.');
+    `, async (err, rows) => {
+        if (err) {
+            console.error('Error fetching team list:', err);
+            return interaction.reply('An error occurred while displaying the team list. Please try again later.');
+          }
+      
+          let teamList = 'Team List:\n\n';
+          for (const row of rows) {
+            const status = await getTeamStatus(row.id);
+            teamList += `ID: ${row.id} | ${row.name}\n`;
+            teamList += `Owner: ${row.owner_name || 'N/A'}\n`;
+            teamList += `Members: ${row.member_names || 'None'}\n`;
+            teamList += `Member Count: ${row.member_count}\n`;
+            teamList += `Status: ${status}\n\n`;
+          }
+      
+          const embed = new EmbedBuilder()
+            .setTitle('Assassin Game Team List')
+            .setDescription(teamList);
+      
+          interaction.reply({ embeds: [embed] });
+        });
       }
-  
-      let teamList = 'Team List:\n\n';
-      rows.forEach((row) => {
-        teamList += `ID: ${row.id} | ${row.name}\n`;
-        teamList += `Owner: ${row.owner_name || 'N/A'}\n`;
-        teamList += `Members: ${row.member_names || 'None'}\n`;
-        teamList += `Member Count: ${row.member_count}\n`;
-        teamList += `Status: ${row.status}\n\n`;
-      });
-  
-      const embed = new EmbedBuilder()
-        .setTitle('Assassin Game Team List')
-        .setDescription(teamList);
-  
-      interaction.reply({ embeds: [embed] });
-    });
-  }
 
 async function displayHelp(interaction) {
     const helpMessage = `
@@ -1525,6 +1550,19 @@ function updateLeaderboard() {
       });
   });
 }
+
+function getTeamStatus(teamId) {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT COUNT(*) AS total, COUNT(CASE WHEN is_alive = 1 THEN 1 END) AS alive FROM players WHERE team_id = ?', [teamId], (err, row) => {
+        if (err) {
+          console.error('Error checking team status:', err);
+          reject(err);
+        } else {
+          resolve(row.alive > 0 ? 'Alive' : 'Eliminated');
+        }
+      });
+    });
+  }
 
 function isPlayer(interaction) {
   return interaction.member.roles.cache.has(config.roles.player);
