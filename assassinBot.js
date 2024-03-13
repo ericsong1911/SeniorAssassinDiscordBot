@@ -613,7 +613,7 @@ async function approvePlayer(interaction, playerId) {
           return interaction.reply('The specified team does not exist.');
         }
   
-        if (teamRow.owner_id !== playerRow.id) {
+        if (teamRow.owner_id !== playerRow.discord_id) {
           return interaction.reply('You must be the team owner to kick players.');
         }
   
