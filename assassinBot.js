@@ -1161,14 +1161,14 @@ client.on('messageCreate', async (message) => {
 
 async function handleJoinButtonInteraction(interaction, action, playerId, teamId) {
     if (action === 'joinapprove') {
-      db.run('UPDATE players SET team_id = ? WHERE id = ?', [teamId, playerId], (err) => {
+      db.run('UPDATE players SET team_id = ? WHERE discord_id = ?', [teamId, BigInt(playerId).toString()], (err) => {
         if (err) {
           console.error('Error updating player team:', err);
           return interaction.reply('An error occurred while approving the join request. Please try again later.');
         }
   
         interaction.reply(`Player has been added to your team!`);
-        
+  
         client.users.fetch(BigInt(playerId).toString())
           .then((player) => {
             player.send(`Your request to join the team has been approved!`);
@@ -1180,7 +1180,6 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     } else if (action === 'joinreject') {
       interaction.reply(`Join request has been rejected.`);
       client.users.fetch(BigInt(playerId).toString())
-
         .then((player) => {
           player.send(`Your request to join the team has been rejected.`);
         })
