@@ -913,22 +913,7 @@ async function displayPlayerList(interaction) {
 }
 
 async function displayTeamList(interaction) {
-    db.all(`
-      SELECT 
-        t.id, 
-        t.name, 
-        p.name AS owner_name, 
-        GROUP_CONCAT(p2.name) AS member_names,
-        COUNT(p2.id) AS member_count,
-        CASE 
-          WHEN COUNT(p2.id) = COUNT(CASE WHEN p2.is_alive = 1 THEN 1 END) THEN 'Alive'
-          ELSE 'Eliminated'
-        END AS status
-      FROM teams t
-      LEFT JOIN players p ON t.owner_id = p.discord_id
-      LEFT JOIN players p2 ON t.id = p2.team_id
-      GROUP BY t.id
-    `, async (err, rows) => {
+    db.all(`SELECT * FROM teams`, async (err, rows) => {
         if (err) {
             console.error('Error fetching team list:', err);
             return interaction.reply('An error occurred while displaying the team list. Please try again later.');
@@ -1048,31 +1033,29 @@ async function displayHelp(interaction) {
     });
   }
 
-  function checkTeamElimination(targetTeamId) {
-    db.get('SELECT * FROM teams WHERE id = ?', [targetTeamId], (err, targetTeam) => {
+  async function checkTeamElimination(teamId, interaction) {
+    db.get('SELECT COUNT(*) AS count FROM players WHERE team_id = ? AND is_alive = 1', [teamId], (err, row) => {
       if (err) {
-        console.error('Error fetching target team:', err);
+        console.error('Error checking team elimination:', err);
         return;
       }
   
-      if (!targetTeam) {
-        console.error('Target team not found.');
-        return;
-      }
+      if (row.count === 0) {
+        console.log(`Team ${teamId} has been eliminated!`);
+        const statusChannel = client.channels.cache.get(config.channels.status);
+        statusChannel.send(`Team ${teamId} has been eliminated!`);
   
-      db.all('SELECT * FROM players WHERE team_id = ? AND is_alive = 1', [targetTeamId], (err, alivePlayers) => {
-        if (err) {
-          console.error('Error fetching alive players:', err);
-          return;
-        }
+        // Fetch the eliminated team's name
+        db.get('SELECT name FROM teams WHERE id = ?', [teamId], (err, teamRow) => {
+          if (err) {
+            console.error('Error fetching eliminated team name:', err);
+            return;
+          }
   
-        if (alivePlayers.length === 0) {
-          console.log(`Team ${targetTeam.name} has been eliminated!`);
-          const statusChannel = client.channels.cache.get(config.channels.status);
-          statusChannel.send(`Team ${targetTeam.name} has been eliminated!`);
+          const eliminatedTeamName = teamRow.name;
   
           // Find the team that was hunting the eliminated team
-          db.get('SELECT * FROM teams WHERE target_id = ?', [targetTeamId], (err, huntingTeam) => {
+          db.get('SELECT * FROM teams WHERE target_id = ?', [teamId], (err, huntingTeam) => {
             if (err) {
               console.error('Error fetching hunting team:', err);
               return;
@@ -1080,15 +1063,15 @@ async function displayHelp(interaction) {
   
             if (huntingTeam) {
               // Assign a new target to the hunting team
-              reassignTarget(huntingTeam.id);
+              reassignTarget(huntingTeam.id, eliminatedTeamName, interaction);
             }
           });
-        }
-      });
+        });
+      }
     });
   }
 
-  function reassignTarget(teamId) {
+  async function reassignTarget(teamId, eliminatedTeamName, interaction) {
     db.all('SELECT * FROM teams WHERE id != ? AND id NOT IN (SELECT target_id FROM teams WHERE target_id IS NOT NULL)', [teamId], (err, availableTargets) => {
       if (err) {
         console.error('Error fetching available targets:', err);
@@ -1097,6 +1080,7 @@ async function displayHelp(interaction) {
   
       if (availableTargets.length === 0) {
         console.log(`No available targets for team ${teamId}`);
+        interaction.followUp(`Team ${teamId} has no available targets after eliminating ${eliminatedTeamName}.`);
         return;
       }
   
@@ -1128,6 +1112,8 @@ async function displayHelp(interaction) {
             });
           }
         });
+  
+        interaction.followUp(`Team ${teamId} has been assigned a new target after eliminating ${eliminatedTeamName}.`);
       });
     });
   }
@@ -1248,7 +1234,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
 
   async function handleAssassinationApproval(interaction, assassinationId, assassinId, targetId) {
     db.serialize(() => {
-        db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [BigInt(targetId).toString()], (err) => {
+      db.run('UPDATE players SET is_alive = 0 WHERE discord_id = ?', [BigInt(targetId).toString()], (err) => {
         if (err) {
           console.error('Error updating player status:', err);
           interaction.reply('An error occurred while processing the assassination. Please try again later.');
@@ -1271,17 +1257,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
             if (err) {
               console.error('Error fetching target player:', err);
             } else {
-              checkTeamElimination(targetRow.team_id);
-  
-              // Fetch target player and team details
-              db.get('SELECT p.name, t.name AS team_name FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ?', [targetRow.id], (err, playerTeamRow) => {
-                if (err) {
-                  console.error('Error fetching player and team details:', err);
-                } else {
-                  const statusChannel = client.channels.cache.get(config.channels.status);
-                  statusChannel.send(`Player ${playerTeamRow.name} from team ${playerTeamRow.team_name} has been eliminated!`);
-                }
-              });
+              checkTeamElimination(targetRow.team_id, interaction);
             }
           });
   
