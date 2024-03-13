@@ -913,29 +913,29 @@ async function displayPlayerList(interaction) {
 }
 
 async function displayTeamList(interaction) {
-    db.all(`SELECT * FROM teams`, async (err, rows) => {
-        if (err) {
-            console.error('Error fetching team list:', err);
-            return interaction.reply('An error occurred while displaying the team list. Please try again later.');
-          }
-      
-          let teamList = 'Team List:\n\n';
-          for (const row of rows) {
-            const status = await getTeamStatus(row.id);
-            teamList += `ID: ${row.id} | ${row.name}\n`;
-            teamList += `Owner: ${row.owner_name || 'N/A'}\n`;
-            teamList += `Members: ${row.member_names || 'None'}\n`;
-            teamList += `Member Count: ${row.member_count}\n`;
-            teamList += `Status: ${status}\n\n`;
-          }
-      
-          const embed = new EmbedBuilder()
-            .setTitle('Assassin Game Team List')
-            .setDescription(teamList);
-      
-          interaction.reply({ embeds: [embed] });
-        });
+    db.all('SELECT * FROM teams', async (err, rows) => {
+      if (err) {
+        console.error('Error fetching team list:', err);
+        return interaction.reply('An error occurred while displaying the team list. Please try again later.');
       }
+  
+      let teamList = 'Team List:\n\n';
+      for (const row of rows) {
+        const status = await getTeamStatus(row.id);
+        teamList += `ID: ${row.id} | ${row.name}\n`;
+        teamList += `Owner: ${row.owner_name || 'N/A'}\n`;
+        teamList += `Members: ${row.member_names || 'None'}\n`;
+        teamList += `Member Count: ${row.member_count}\n`;
+        teamList += `Status: ${status}\n\n`;
+      }
+  
+      const embed = new EmbedBuilder()
+        .setTitle('Assassin Game Team List')
+        .setDescription(teamList);
+  
+      interaction.reply({ embeds: [embed] });
+    });
+  }
 
 async function displayHelp(interaction) {
     const helpMessage = `
