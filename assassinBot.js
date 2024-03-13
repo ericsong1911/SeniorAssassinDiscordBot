@@ -51,7 +51,7 @@ function initializeDatabase() {
   db.run(`CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
-    owner_id INTEGER,
+    owner_id TEXT UNIQUE,
     FOREIGN KEY (owner_id) REFERENCES players (id)
   )`);
 
