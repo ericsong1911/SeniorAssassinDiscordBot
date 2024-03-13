@@ -913,7 +913,17 @@ async function displayPlayerList(interaction) {
 }
 
 async function displayTeamList(interaction) {
-    db.all('SELECT * FROM teams', async (err, rows) => {
+    db.all(`
+      SELECT 
+        t.id, 
+        t.name, 
+        p.name AS owner_name,
+        (SELECT COUNT(*) FROM players WHERE team_id = t.id) AS member_count,
+        (SELECT GROUP_CONCAT(name) FROM players WHERE team_id = t.id) AS member_names,
+        (SELECT CASE WHEN COUNT(*) = COUNT(CASE WHEN is_alive = 1 THEN 1 END) THEN 'Alive' ELSE 'Eliminated' END FROM players WHERE team_id = t.id) AS status
+      FROM teams t
+      LEFT JOIN players p ON t.owner_id = p.discord_id
+    `, async (err, rows) => {
       if (err) {
         console.error('Error fetching team list:', err);
         return interaction.reply('An error occurred while displaying the team list. Please try again later.');
@@ -921,12 +931,11 @@ async function displayTeamList(interaction) {
   
       let teamList = 'Team List:\n\n';
       for (const row of rows) {
-        const status = await getTeamStatus(row.id);
         teamList += `ID: ${row.id} | ${row.name}\n`;
         teamList += `Owner: ${row.owner_name || 'N/A'}\n`;
         teamList += `Members: ${row.member_names || 'None'}\n`;
         teamList += `Member Count: ${row.member_count}\n`;
-        teamList += `Status: ${status}\n\n`;
+        teamList += `Status: ${row.status}\n\n`;
       }
   
       const embed = new EmbedBuilder()
