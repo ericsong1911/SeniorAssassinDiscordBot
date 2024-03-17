@@ -1526,6 +1526,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
       db.get('SELECT * FROM teams WHERE id = ?', [targetId], (err, targetTeam) => {
         if (!err && targetTeam) {
           db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
+            console.log('important info:' + targetId + ',' + teamId);
             if (!err && players) {
               players.forEach((player) => {
                 client.users.fetch(BigInt(player.discord_id).toString())
