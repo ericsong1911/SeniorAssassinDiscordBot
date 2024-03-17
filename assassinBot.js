@@ -802,7 +802,7 @@ async function handleAssassinationReport(interaction) {
         if (evidenceType === 'photo') {
           embed.setImage(evidenceAttachment.url);
         } else if (evidenceType === 'video') {
-          embed.setVideo(evidenceAttachment.url);
+          embed.setDescription(`${embed.description}\nEvidence: ${evidenceAttachment.url}`);
         }
   
         const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
