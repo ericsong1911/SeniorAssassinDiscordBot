@@ -230,55 +230,66 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.reply('The game has already started. Registration is not allowed at this time.');
       }
   
-      const name = interaction.user.username;
-  
-      if (config.game.allow_manual_approval) {
-        const gameManagerRole = interaction.guild.roles.cache.get(config.roles.game_manager);
-        const gameManagers = interaction.guild.members.cache.filter((member) => member.roles.cache.has(gameManagerRole.id));
-  
-        const embed = new EmbedBuilder()
-          .setTitle('New Player Registration')
-          .setDescription(`${interaction.user.username} has requested to join the game.`)
-          .addFields(
-            { name: 'Discord ID', value: userId }
-          )
-          .setTimestamp();
-  
-        const approveButton = {
-          type: 2,
-          style: 3,
-          label: 'Approve',
-          custom_id: `approvePlayer_${userId}`,
-        };
-  
-        const rejectButton = {
-          type: 2,
-          style: 4,
-          label: 'Reject',
-          custom_id: `rejectPlayer_${userId}`,
-        };
-  
-        const actionRow = {
-          type: 1,
-          components: [approveButton, rejectButton],
-        };
-  
-        gameManagers.forEach((manager) => {
-          manager.send({ embeds: [embed], components: [actionRow] });
-        });
-  
-        interaction.reply('Your registration request has been submitted for manual approval. Please wait for a game manager to review your request.');
-      } else {
-        try {
-          await addPlayerToDatabase(userId, name);
-          const playerRole = interaction.guild.roles.cache.get(config.roles.player);
-          await interaction.member.roles.add(playerRole);
-          interaction.reply('You have been successfully registered for the game and assigned the player role!');
-        } catch (error) {
-          console.error('Error registering player:', error);
-          interaction.reply('An error occurred while registering. Please try again later.');
+      db.get('SELECT * FROM players WHERE discord_id = ?', [userId], async (err, playerRow) => {
+        if (err) {
+          console.error('Error checking player registration:', err);
+          return interaction.reply('An error occurred while registering. Please try again later.');
         }
-      }
+  
+        if (playerRow) {
+          return interaction.reply('You are already registered for the game.');
+        }
+  
+        const name = interaction.user.username;
+  
+        if (config.game.allow_manual_approval) {
+          const gameManagerRole = interaction.guild.roles.cache.get(config.roles.game_manager);
+          const gameManagers = interaction.guild.members.cache.filter((member) => member.roles.cache.has(gameManagerRole.id));
+  
+          const embed = new EmbedBuilder()
+            .setTitle('New Player Registration')
+            .setDescription(`${interaction.user.username} has requested to join the game.`)
+            .addFields(
+              { name: 'Discord ID', value: userId }
+            )
+            .setTimestamp();
+  
+          const approveButton = {
+            type: 2,
+            style: 3,
+            label: 'Approve',
+            custom_id: `approvePlayer_${userId}`,
+          };
+  
+          const rejectButton = {
+            type: 2,
+            style: 4,
+            label: 'Reject',
+            custom_id: `rejectPlayer_${userId}`,
+          };
+  
+          const actionRow = {
+            type: 1,
+            components: [approveButton, rejectButton],
+          };
+  
+          gameManagers.forEach((manager) => {
+            manager.send({ embeds: [embed], components: [actionRow] });
+          });
+  
+          interaction.reply('Your registration request has been submitted for manual approval. Please wait for a game manager to review your request.');
+        } else {
+          try {
+            await addPlayerToDatabase(userId, name);
+            const playerRole = interaction.guild.roles.cache.get(config.roles.player);
+            await interaction.member.roles.add(playerRole);
+            interaction.reply('You have been successfully registered for the game and assigned the player role!');
+          } catch (error) {
+            console.error('Error registering player:', error);
+            interaction.reply('An error occurred while registering. Please try again later.');
+          }
+        }
+      });
     });
   }
   
