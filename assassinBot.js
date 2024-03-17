@@ -284,7 +284,7 @@ client.on('interactionCreate', async (interaction) => {
   
   async function addPlayerToDatabase(userId, name) {
     return new Promise((resolve, reject) => {
-      db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId.toString(), name], function (err) {
+      db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [BigInt(userId).toString(), name], function (err) {
         if (err) {
           console.error('Error adding player to database:', err);
           reject(err);
@@ -297,7 +297,7 @@ client.on('interactionCreate', async (interaction) => {
 
   async function approvePlayer(interaction, userId) {
     try {
-      const member = await interaction.guild.members.fetch(userId);
+      const member = await interaction.guild.members.fetch(BigInt(userId).toString());
       const name = member.user.username;
   
       await addPlayerToDatabase(userId, name);
@@ -315,7 +315,7 @@ client.on('interactionCreate', async (interaction) => {
 
   async function rejectPlayer(interaction, userId) {
     try {
-      const member = await interaction.guild.members.fetch(userId);
+      const member = await interaction.guild.members.fetch(BigInt(userId).toString);
       const name = member.user.username;
   
       interaction.reply(`Player ${name}'s registration request has been rejected.`);
@@ -1266,7 +1266,6 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     }
     if (interaction.isButton()) {
       const [action, playerId] = interaction.customId.split('_');
-  
       if (action === 'approvePlayer') {
         await approvePlayer(interaction, playerId);
       } else if (action === 'rejectPlayer') {
