@@ -52,7 +52,9 @@ function initializeDatabase() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     owner_id TEXT UNIQUE,
-    FOREIGN KEY (owner_id) REFERENCES players (id)
+    target_id INTEGER,
+    FOREIGN KEY (owner_id) REFERENCES players (id),
+    FOREIGN KEY (target_id) REFERENCES teams (id)
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS disputes (
@@ -67,6 +69,7 @@ function initializeDatabase() {
     assassin_id TEXT,
     target_id TEXT,
     evidence_url TEXT,
+    evidence_type TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -91,7 +94,7 @@ const commands = [
       .setName('report-assassination')
       .setDescription('Report an assassination with evidence')
       .addUserOption(option => option.setName('target').setDescription('The player to assassinate').setRequired(true))
-      .addAttachmentOption(option => option.setName('evidence').setDescription('Evidence of the assassination').setRequired(true)),
+      .addAttachmentOption(option => option.setName('evidence').setDescription('Photo or video evidence of the assassination').setRequired(true)),
     new SlashCommandBuilder().setName('submit-dispute').setDescription('Submit a dispute for review').addStringOption(option => option.setName('dispute').setDescription('The details of the dispute').setRequired(true)),
     new SlashCommandBuilder().setName('resolve-dispute').setDescription('Resolve a dispute').addStringOption(option => option.setName('dispute_id').setDescription('The ID of the dispute to resolve').setRequired(true)).addStringOption(option => option.setName('resolution').setDescription('The resolution of the dispute').setRequired(true)),
     new SlashCommandBuilder().setName('leaderboard').setDescription('Display the current leaderboard'),
@@ -101,6 +104,7 @@ const commands = [
     new SlashCommandBuilder().setName('help').setDescription('Display the help message'),
     new SlashCommandBuilder().setName('eliminate').setDescription('Eliminate a player from the game (admin only)').addStringOption(option => option.setName('player_id').setDescription('The ID of the player to eliminate').setRequired(true)),
     new SlashCommandBuilder().setName('revive').setDescription('Revive a player in the game (admin only)').addStringOption(option => option.setName('player_id').setDescription('The ID of the player to revive').setRequired(true)),
+    new SlashCommandBuilder().setName('end-game').setDescription('End the game and declare a winner (game manager only)'),
   ];
 
 const rest = new REST({ version: '9' }).setToken(config.bot.token);
@@ -146,6 +150,7 @@ client.on('interactionCreate', async (interaction) => {
           commandName !== 'rules' &&
           commandName !== 'player-list' &&
           commandName !== 'team-list' &&
+          commandName !== 'end-game' &&
           commandName !== 'help'
         ) {
           return interaction.reply('This command is not available during the lobby phase.');
@@ -198,6 +203,8 @@ client.on('interactionCreate', async (interaction) => {
       await eliminatePlayer(interaction);
     } else if (commandName === 'revive') {
       await revivePlayer(interaction);
+    } else if (commandName === 'end-game') {
+      await endGame(interaction);
     }
   });
 });
@@ -723,9 +730,10 @@ async function handleGameStart(interaction) {
       const votingChannel = interaction.guild.channels.cache.get(config.channels.voting);
       const assassinId = interaction.user.id;
       const targetId = interaction.options.getUser('target').id;
-      const evidenceImage = interaction.options.getAttachment('evidence');
-  
-      db.run('INSERT INTO assassinations (assassin_id, target_id, evidence_url) VALUES (?, ?, ?)', [assassinId, targetId, evidenceImage.url], async function(err) {
+      const evidenceAttachment = interaction.options.getAttachment('evidence');
+      const evidenceType = evidenceAttachment.contentType.startsWith('image') ? 'photo' : 'video';
+
+      db.run('INSERT INTO assassinations (assassin_id, target_id, evidence_url, evidence_type) VALUES (?, ?, ?, ?)', [assassinId, targetId, evidenceAttachment.url, evidenceType], async function(err) {
         if (err) {
           console.error('Error inserting assassination:', err);
           return interaction.reply('An error occurred while processing the assassination. Please try again later.');
@@ -1438,6 +1446,36 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
         });
     });
   }
+
+async function endGame(interaction) {
+  if (!isGameManager(interaction)) {
+    return interaction.reply('Only game managers can end the game.');
+  }
+
+  try {
+    const winner = await determineWinner();
+
+    if (winner) {
+      const channel = client.channels.cache.get(config.channels.status);
+      channel.send(`The game has ended! The winning team is ${winner.team_name} with ${winner.kills} kills.`);
+    } else {
+      const channel = client.channels.cache.get(config.channels.status);
+      channel.send('The game has ended in a draw!');
+    }
+
+    db.run('UPDATE game_state SET state = ?', ['ended'], (err) => {
+      if (err) {
+        console.error('Error updating game state:', err);
+        return interaction.reply('An error occurred while ending the game. Please try again later.');
+      }
+
+      interaction.reply('The game has been ended.');
+    });
+  } catch (error) {
+    console.error('Error ending game:', error);
+    interaction.reply('An error occurred while ending the game. Please try again later.');
+  }
+}
 
 function updateLeaderboard() {
   const channel = client.channels.cache.get(config.channels.leaderboard);
