@@ -738,32 +738,60 @@ async function handleGameStart(interaction) {
 });
 }
 
-  async function handleAssassinationReport(interaction) {
-    if (!isPlayer(interaction)) {
-      return interaction.reply('Only players can report assassinations.');
-    }
-  
-    db.get('SELECT state FROM game_state', async (err, row) => {
-      if (err) {
-        console.error('Error checking game state:', err);
-        return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
-      }
-  
-      if (row.state !== config.game.states.active) {
-        return interaction.reply('Assassination reports can only be submitted during an active game.');
-      }
-  
-      const votingChannel = interaction.guild.channels.cache.get(config.channels.voting);
-      const assassinId = interaction.user.id;
-      const targetId = interaction.options.getUser('target').id;
-      const evidenceAttachment = interaction.options.getAttachment('evidence');
-      const evidenceType = evidenceAttachment.contentType.startsWith('image') ? 'photo' : 'video';
+async function handleAssassinationReport(interaction) {
+  if (!isPlayer(interaction)) {
+    return interaction.reply('Only players can report assassinations.');
+  }
 
-      db.run('INSERT INTO assassinations (assassin_id, target_id, evidence_url, evidence_type) VALUES (?, ?, ?, ?)', [assassinId, targetId, evidenceAttachment.url, evidenceType], async function(err) {
+  db.get('SELECT state FROM game_state', async (err, row) => {
+    if (err) {
+      console.error('Error checking game state:', err);
+      return interaction.reply('An error occurred while reporting the assassination. Please try again later.');
+    }
+
+    if (row.state !== config.game.states.active) {
+      return interaction.reply('Assassination reports can only be submitted during an active game.');
+    }
+
+    const votingChannel = interaction.guild.channels.cache.get(config.channels.voting);
+    const assassinId = interaction.user.id;
+    const targetId = interaction.options.getUser('target').id;
+    const evidenceAttachment = interaction.options.getAttachment('evidence');
+    const evidenceType = evidenceAttachment.contentType.startsWith('image') ? 'photo' : 'video';
+
+    // Check if the target is the assigned target for the assassin's team
+    db.get('SELECT t.target_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.discord_id = ?', [BigInt(assassinId).toString()], async (err, row) => {
+      if (err) {
+        console.error('Error fetching team target:', err);
+        return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+      }
+
+      const assignedTarget = row.target_id;
+      db.get('SELECT id FROM teams WHERE id = ?', [assignedTarget], async (err, targetTeamRow) => {
         if (err) {
-          console.error('Error inserting assassination:', err);
+          console.error('Error fetching target team:', err);
           return interaction.reply('An error occurred while processing the assassination. Please try again later.');
         }
+
+        const targetTeamId = targetTeamRow.id;
+        db.get('SELECT id FROM teams WHERE id = (SELECT team_id FROM players WHERE discord_id = ?)', [BigInt(targetId).toString()], async (err, targetPlayerTeamRow) => {
+          if (err) {
+            console.error('Error fetching target player team:', err);
+            return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+          }
+
+          const targetPlayerTeamId = targetPlayerTeamRow.id;
+
+          if (targetTeamId !== targetPlayerTeamId) {
+            return interaction.reply('You can only assassinate your assigned target team.');
+          }
+
+          // If the target is the assigned target, proceed with the assassination report
+          db.run('INSERT INTO assassinations (assassin_id, target_id, evidence_url, evidence_type) VALUES (?, ?, ?, ?)', [assassinId, targetId, evidenceAttachment.url, evidenceType], async function(err) {
+            if (err) {
+              console.error('Error inserting assassination:', err);
+              return interaction.reply('An error occurred while processing the assassination. Please try again later.');
+            }
   
         const assassinationId = this.lastID;
         const embed = new EmbedBuilder()
@@ -801,7 +829,11 @@ async function handleGameStart(interaction) {
         interaction.reply('Your assassination report has been submitted for voting.');
       });
     });
-  }
+  });
+});
+});
+}
+
 
 async function handleDisputeSubmission(interaction) {
   if (!isPlayer(interaction)) {
