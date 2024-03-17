@@ -295,9 +295,9 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  async function approvePlayer(interaction, discordId) {
+  async function approvePlayer(discordId) {
     try {
-      const guild = client.guilds.cache.get(interaction.guildId);
+      const guild = client.guilds.cache.get(config.channels.guild_id);
       if (!guild) {
         throw new Error('Guild not found');
       }
@@ -309,18 +309,16 @@ client.on('interactionCreate', async (interaction) => {
   
       const playerRole = guild.roles.cache.get(config.roles.player);
       await member.roles.add(playerRole);
-      await interaction.reply(`Player ${name} has been approved and assigned the player role.`);
   
       member.send('Your registration request has been approved! You can now participate in the game.');
     } catch (error) {
       console.error('Error approving player:', error);
-      await interaction.reply('An error occurred while approving the player. Please try again later.');
     }
   }
   
-  async function rejectPlayer(interaction, discordId) {
+  async function rejectPlayer(discordId) {
     try {
-      const guild = client.guilds.cache.get(interaction.guildId);
+      const guild = client.guilds.cache.get(config.channels.guild_id);
       if (!guild) {
         throw new Error('Guild not found');
       }
@@ -328,12 +326,9 @@ client.on('interactionCreate', async (interaction) => {
       const member = await guild.members.fetch(discordId);
       const name = member.user.username;
   
-      await interaction.reply(`Player ${name}'s registration request has been rejected.`);
-  
       member.send('Sorry, your registration request has been rejected. Please contact a game manager for more information.');
     } catch (error) {
       console.error('Error rejecting player:', error);
-      await interaction.reply('An error occurred while rejecting the player. Please try again later.');
     }
   }
   
@@ -1267,21 +1262,18 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
       const [assassinationId] = args;
       await handleAssassinationButtonInteraction(interaction, assassinationId);
     }
-    else if (action === 'approvePlayer') {
-        const [playerId] = args;
-        await approvePlayer(interaction, playerId);
+   
+    if (action === 'approvePlayer') {
+      const [discordId] = args;
+      await approvePlayer(discordId);
+      await interaction.update({ content: 'Player approved!', components: [] });
     } else if (action === 'rejectPlayer') {
-        const [playerId] = args;
-        await rejectPlayer(interaction, playerId);
+      const [discordId] = args;
+      await rejectPlayer(discordId);
+      await interaction.update({ content: 'Player rejected!', components: [] });
     }
-    if (interaction.isButton()) {
-      const [action, playerId] = interaction.customId.split('_');
-      if (action === 'approvePlayer') {
-        await approvePlayer(interaction, playerId);
-      } else if (action === 'rejectPlayer') {
-        await rejectPlayer(interaction, playerId);
-      }
-    }
+  
+    
   });
 
   function endGame() {
