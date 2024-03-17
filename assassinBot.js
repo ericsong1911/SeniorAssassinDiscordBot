@@ -482,7 +482,7 @@ client.on('interactionCreate', async (interaction) => {
           return interaction.reply('The specified team does not exist.');
         }
   
-        if (teamRow.owner_id === playerRow.id) {
+        if (BigInt(teamRow.owner_id).toString() === BigInt(playerRow.id).toString()) {
           // If the player is the team owner, transfer ownership to the next oldest member
           db.get('SELECT * FROM players WHERE team_id = ? AND discord_id != ? ORDER BY id LIMIT 1', [teamId, userId], (err, newOwnerRow) => {
             if (err) {
@@ -491,7 +491,7 @@ client.on('interactionCreate', async (interaction) => {
             }
   
             if (newOwnerRow) {
-              db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [BigInt(newOwnerRow.discord_id).toString(), teamId], (err) => {
+              db.run('UPDATE teams SET owner_id = ? WHERE id = ?', [newOwnerRow.discord_id.toString(), teamId], (err) => {
                 if (err) {
                   console.error('Error updating team owner:', err);
                   return interaction.reply('An error occurred while leaving the team. Please try again later.');
