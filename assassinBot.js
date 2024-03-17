@@ -1439,23 +1439,26 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
         .then(() => {
           console.log('Targets assigned successfully');
           // Send DMs to players with their assigned targets
-          db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
-            if (!err && players) {
-              players.forEach((player) => {
-                client.users.fetch(BigInt(player.discord_id).toString())
-                  .then((user) => {
-                    db.get('SELECT * FROM teams WHERE id = ?', [targetId], (err, targetTeam) => {
-                      if (!err && targetTeam) {
-                        user.send(`Your team's target is: ${targetTeam.name}`);
-                      }
+          teams.forEach((team) => {
+            const { id: teamId, target_id: targetId } = team;
+            db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
+              if (!err && players) {
+                players.forEach((player) => {
+                  client.users.fetch(BigInt(player.discord_id).toString())
+                    .then((user) => {
+                      db.get('SELECT * FROM teams WHERE id = ?', [targetId], (err, targetTeam) => {
+                        if (!err && targetTeam) {
+                          user.send(`Your team's target is: ${targetTeam.name}`);
+                        }
+                      });
+                    })
+                    .catch((err) => {
+                      console.error('Error sending target DM to player:', err);
                     });
-                  })
-                  .catch((err) => {
-                    console.error('Error sending target DM to player:', err);
-                  });
                 });
               }
             });
+          });
         })
         .catch((error) => {
           console.error('Error updating team targets:', error);
