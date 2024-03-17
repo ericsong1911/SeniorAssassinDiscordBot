@@ -295,35 +295,45 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  async function approvePlayer(interaction, userId) {
+  async function approvePlayer(interaction, discordId) {
     try {
-      const member = await interaction.guild.members.fetch(BigInt(userId).toString());
+      const guild = client.guilds.cache.get(interaction.guildId);
+      if (!guild) {
+        throw new Error('Guild not found');
+      }
+  
+      const member = await guild.members.fetch(discordId);
       const name = member.user.username;
   
-      await addPlayerToDatabase(userId, name);
+      await addPlayerToDatabase(discordId, name);
   
-      const playerRole = interaction.guild.roles.cache.get(config.roles.player);
+      const playerRole = guild.roles.cache.get(config.roles.player);
       await member.roles.add(playerRole);
-      interaction.reply(`Player ${name} has been approved and assigned the player role.`);
+      await interaction.reply(`Player ${name} has been approved and assigned the player role.`);
   
       member.send('Your registration request has been approved! You can now participate in the game.');
     } catch (error) {
       console.error('Error approving player:', error);
-      interaction.reply('An error occurred while approving the player. Please try again later.');
+      await interaction.reply('An error occurred while approving the player. Please try again later.');
     }
   }
-
-  async function rejectPlayer(interaction, userId) {
+  
+  async function rejectPlayer(interaction, discordId) {
     try {
-      const member = await interaction.guild.members.fetch(BigInt(userId).toString);
+      const guild = client.guilds.cache.get(interaction.guildId);
+      if (!guild) {
+        throw new Error('Guild not found');
+      }
+  
+      const member = await guild.members.fetch(discordId);
       const name = member.user.username;
   
-      interaction.reply(`Player ${name}'s registration request has been rejected.`);
+      await interaction.reply(`Player ${name}'s registration request has been rejected.`);
   
       member.send('Sorry, your registration request has been rejected. Please contact a game manager for more information.');
     } catch (error) {
       console.error('Error rejecting player:', error);
-      interaction.reply('An error occurred while rejecting the player. Please try again later.');
+      await interaction.reply('An error occurred while rejecting the player. Please try again later.');
     }
   }
   
