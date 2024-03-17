@@ -792,25 +792,26 @@ async function handleAssassinationReport(interaction) {
               console.error('Error inserting assassination:', err);
               return interaction.reply('An error occurred while processing the assassination. Please try again later.');
             }
-  
-        const assassinationId = this.lastID;
-        const embed = new EmbedBuilder()
-          .setTitle('Assassination Evidence')
-          .setDescription(`Assassin: <@${assassinId}>\nTarget: <@${targetId}>`)
-          .setFooter({ text: `Assassination ID: ${assassinationId}` });
-
-        if (evidenceType === 'photo') {
-          embed.setImage(evidenceAttachment.url);
-        } else if (evidenceType === 'video') {
-          embed.setDescription(`${embed.description}\nEvidence: ${evidenceAttachment.url}`);
-        }
-  
-        const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
-  
-        const votingMessage = await votingChannel.send({
-          content: 'Assassination reported. Please vote within the time limit.',
-          embeds: [embed],
-        });
+      
+            const assassinationId = this.lastID;
+            const embed = new EmbedBuilder()
+              .setTitle('Assassination Evidence')
+              .setDescription(`Assassin: <@${assassinId}>\nTarget: <@${targetId}>`);
+      
+            if (evidenceType === 'photo') {
+              embed.setImage(evidenceAttachment.url);
+            } else if (evidenceType === 'video') {
+              embed.setDescription(`${embed.description}\nEvidence: ${evidenceAttachment.url}`);
+            }
+      
+            embed.setFooter({ text: `Assassination ID: ${assassinationId}` });
+      
+            const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
+      
+            const votingMessage = await votingChannel.send({
+              content: 'Assassination reported. Please vote within the time limit.',
+              embeds: [embed],
+            });
   
         await votingMessage.react('✅');
         await votingMessage.react('❌');
