@@ -700,7 +700,17 @@ async function handleGameStart(interaction) {
       return interaction.reply('The game has already started and cannot be started again.');
     }
 
-    db.all('SELECT * FROM players WHERE team_id IS NULL', (err, playersWithoutTeam) => {
+    db.all('SELECT COUNT(*) AS count FROM teams', (err, teamCountRow) => {
+      if (err) {
+        console.error('Error checking team count:', err);
+        return interaction.reply('An error occurred while starting the game. Please try again later.');
+      }
+  
+      if (teamCountRow[0].count < config.game.min_team_count) {
+        return interaction.reply(`The game cannot start until there are at least ${config.game.min_team_count} teams.`);
+      }
+  
+      db.all('SELECT * FROM players WHERE team_id IS NULL', (err, playersWithoutTeam) => {
       if (err) {
         console.error('Error checking players without a team:', err);
         return interaction.reply('An error occurred while starting the game. Please try again later.');
@@ -726,6 +736,7 @@ async function handleGameStart(interaction) {
       });
     });
   });
+});
 }
 
   async function handleAssassinationReport(interaction) {
@@ -1075,6 +1086,9 @@ async function displayHelp(interaction) {
             }
           });
         });
+  
+        // Check if there is a winner
+        checkForWinner(interaction);
       }
     });
   }
@@ -1243,7 +1257,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
           });
       });
     });
-  }
+  }  
   
   async function handleAssassinationRejection(interaction, assassinationId) {
     // Send rejection message to the assassin
@@ -1530,18 +1544,21 @@ function updateLeaderboard() {
   });
 }
 
-function getTeamStatus(teamId) {
-    return new Promise((resolve, reject) => {
-      db.get('SELECT COUNT(*) AS total, COUNT(CASE WHEN is_alive = 1 THEN 1 END) AS alive FROM players WHERE team_id = ?', [teamId], (err, row) => {
-        if (err) {
-          console.error('Error checking team status:', err);
-          reject(err);
-        } else {
-          resolve(row.alive > 0 ? 'Alive' : 'Eliminated');
-        }
-      });
-    });
-  }
+async function checkForWinner(interaction) {
+  db.all('SELECT * FROM teams WHERE id IN (SELECT DISTINCT team_id FROM players WHERE is_alive = 1)', (err, aliveTeams) => {
+    if (err) {
+      console.error('Error checking for winner:', err);
+      return;
+    }
+
+    if (aliveTeams.length === 1) {
+      const winningTeam = aliveTeams[0];
+      const channel = client.channels.cache.get(config.channels.status);
+      channel.send(`The game has ended! The winning team is ${winningTeam.name}.`);
+      endGame();
+    }
+  });
+}
 
 function isPlayer(interaction) {
   return interaction.member.roles.cache.has(config.roles.player);
