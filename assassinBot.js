@@ -769,7 +769,7 @@ async function handleGameStart(interaction) {
         const embed = new EmbedBuilder()
           .setTitle('Assassination Evidence')
           .setDescription(`Assassin: <@${assassinId}>\nTarget: <@${targetId}>`)
-          .setImage(evidenceImage.url)
+          .setImage(evidenceAttachment.url)
           .setFooter({ text: `Assassination ID: ${assassinationId}` });
   
         const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
