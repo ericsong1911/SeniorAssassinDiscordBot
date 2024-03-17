@@ -794,43 +794,74 @@ async function handleAssassinationReport(interaction) {
             }
       
             const assassinationId = this.lastID;
-            const embed = new EmbedBuilder()
-              .setTitle('Assassination Evidence')
-              .setDescription(`Assassin: <@${assassinId}>\nTarget: <@${targetId}>`);
+            let description = `Assassin: <@${assassinId}>\nTarget: <@${targetId}>`;
       
             if (evidenceType === 'photo') {
-              embed.setImage(evidenceAttachment.url);
-            } else if (evidenceType === 'video') {
-              embed.setDescription(`${embed.description}\nEvidence: ${evidenceAttachment.url}`);
+              const embed = new EmbedBuilder()
+                .setTitle('Assassination Evidence')
+                .setDescription(description)
+                .setImage(evidenceAttachment.url)
+                .setFooter({ text: `Assassination ID: ${assassinationId}` });
+      
+              const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
+      
+              const votingMessage = await votingChannel.send({
+                content: 'Assassination reported. Please vote within the time limit.',
+                embeds: [embed],
+              });
+  
+              await votingMessage.react('✅');
+              await votingMessage.react('❌');
+        
+              const filter = (reaction, user) => ['✅', '❌'].includes(reaction.emoji.name) && !user.bot;
+              const collector = votingMessage.createReactionCollector({ filter, time: votingTimeLimit });
+        
+              collector.on('end', (collected) => {
+                const upvotes = collected.get('✅')?.count || 0;
+                const downvotes = collected.get('❌')?.count || 0;
+        
+                if (upvotes > downvotes) {
+                  interaction.followUp('Assassination approved by majority vote.');
+                  handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
+                } else {
+                  interaction.followUp('Assassination rejected by majority vote.');
+                  handleAssassinationRejection(interaction, assassinationId);
+                }
+              });
+            }  else if (evidenceType === 'video') {
+              description += `\nEvidence: ${evidenceAttachment.url}`;
+      
+              const embed = new EmbedBuilder()
+                .setTitle('Assassination Evidence')
+                .setDescription(description)
+                .setFooter({ text: `Assassination ID: ${assassinationId}` });
+      
+              const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
+      
+              const votingMessage = await votingChannel.send({
+                content: 'Assassination reported. Please vote within the time limit.',
+                embeds: [embed],
+              });
+              
+              await votingMessage.react('✅');
+              await votingMessage.react('❌');
+        
+              const filter = (reaction, user) => ['✅', '❌'].includes(reaction.emoji.name) && !user.bot;
+              const collector = votingMessage.createReactionCollector({ filter, time: votingTimeLimit });
+        
+              collector.on('end', (collected) => {
+                const upvotes = collected.get('✅')?.count || 0;
+                const downvotes = collected.get('❌')?.count || 0;
+        
+                if (upvotes > downvotes) {
+                  interaction.followUp('Assassination approved by majority vote.');
+                  handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
+                } else {
+                  interaction.followUp('Assassination rejected by majority vote.');
+                  handleAssassinationRejection(interaction, assassinationId);
+                }
+              });
             }
-      
-            embed.setFooter({ text: `Assassination ID: ${assassinationId}` });
-      
-            const votingTimeLimit = config.game.voting_time_limit * 60 * 60 * 1000; // Convert hours to milliseconds
-      
-            const votingMessage = await votingChannel.send({
-              content: 'Assassination reported. Please vote within the time limit.',
-              embeds: [embed],
-            });
-  
-        await votingMessage.react('✅');
-        await votingMessage.react('❌');
-  
-        const filter = (reaction, user) => ['✅', '❌'].includes(reaction.emoji.name) && !user.bot;
-        const collector = votingMessage.createReactionCollector({ filter, time: votingTimeLimit });
-  
-        collector.on('end', (collected) => {
-          const upvotes = collected.get('✅')?.count || 0;
-          const downvotes = collected.get('❌')?.count || 0;
-  
-          if (upvotes > downvotes) {
-            interaction.followUp('Assassination approved by majority vote.');
-            handleAssassinationApproval(interaction, assassinationId, assassinId, targetId);
-          } else {
-            interaction.followUp('Assassination rejected by majority vote.');
-            handleAssassinationRejection(interaction, assassinationId);
-          }
-        });
   
         interaction.reply('Your assassination report has been submitted for voting.');
       });
