@@ -1258,12 +1258,7 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     if (action === 'joinapprove' || action === 'joinreject') {
       const [playerId, teamId] = args;
       await handleJoinButtonInteraction(interaction, action, playerId, teamId);
-    } else if (action === 'assassinationapprove' || action === 'assassinationreject') {
-      const [assassinationId] = args;
-      await handleAssassinationButtonInteraction(interaction, assassinationId);
-    }
-   
-    if (action === 'approvePlayer') {
+    } else if (action === 'approvePlayer') {
       const [discordId] = args;
       await approvePlayer(discordId);
       await interaction.update({ content: 'Player approved!', components: [] });
