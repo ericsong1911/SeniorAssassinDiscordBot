@@ -150,7 +150,6 @@ client.on('interactionCreate', async (interaction) => {
           commandName !== 'rules' &&
           commandName !== 'player-list' &&
           commandName !== 'team-list' &&
-          commandName !== 'end-game' &&
           commandName !== 'help'
         ) {
           return interaction.reply('This command is not available during the lobby phase.');
