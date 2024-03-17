@@ -842,7 +842,7 @@ async function handleAssassinationReport(interaction) {
                 content: 'Assassination reported. Please vote within the time limit.',
                 embeds: [embed],
               });
-              
+
               await votingMessage.react('✅');
               await votingMessage.react('❌');
         
@@ -1518,35 +1518,37 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
       });
   
       Promise.all(updateQueries)
-        .then(() => {
-          console.log('Targets assigned successfully');
-          // Send DMs to players with their assigned targets
-          teams.forEach((team) => {
-            const { id: teamId, target_id: targetId } = team;
-            db.get('SELECT * FROM teams WHERE id = ?', [targetId], (err, targetTeam) => {
-              if (!err && targetTeam) {
-                db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
-                  if (!err && players) {
-                    players.forEach((player) => {
-                      client.users.fetch(BigInt(player.discord_id).toString())
-                        .then((user) => {
-                          user.send(`Your team's target is: ${targetTeam.name}`);
-                        })
-                        .catch((err) => {
-                          console.error('Error sending target DM to player:', err);
-                        });
-                    });
-                  }
-                });
-              }
-            });
+  .then(() => {
+    console.log('Targets assigned successfully');
+    // Send DMs to players with their assigned targets
+    teams.forEach((team) => {
+      const { id: teamId, target_id: targetId } = team;
+      db.get('SELECT * FROM teams WHERE id = ?', [targetId], (err, targetTeam) => {
+        if (!err && targetTeam) {
+          db.all('SELECT * FROM players WHERE team_id = ?', [teamId], (err, players) => {
+            if (!err && players) {
+              players.forEach((player) => {
+                client.users.fetch(BigInt(player.discord_id).toString())
+                  .then((user) => {
+                    user.send(`Your team's target is: ${targetTeam.name}`);
+                  })
+                  .catch((err) => {
+                    console.error('Error sending target DM to player:', err);
+                  });
+              });
+            }
           });
-        })
-        .catch((error) => {
-          console.error('Error updating team targets:', error);
-        });
+        } else {
+          console.error('Error fetching target team:', err);
+        }
+      });
     });
-  }
+  })
+  .catch((error) => {
+    console.error('Error updating team targets:', error);
+  });
+});
+}
 
 async function endGame(interaction) {
   if (!isGameManager(interaction)) {
