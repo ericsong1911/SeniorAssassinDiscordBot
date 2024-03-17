@@ -230,152 +230,102 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.reply('The game has already started. Registration is not allowed at this time.');
       }
   
-      db.get('SELECT * FROM players WHERE discord_id = ?', [userId], async (err, row) => {
-        if (err) {
-          console.error('Error checking player registration:', err);
-          return interaction.reply('An error occurred while registering. Please try again later.');
-        }
+      const name = interaction.user.username;
   
-        if (row) {
-          return interaction.reply('You are already registered for the game.');
-        }
+      if (config.game.allow_manual_approval) {
+        const gameManagerRole = interaction.guild.roles.cache.get(config.roles.game_manager);
+        const gameManagers = interaction.guild.members.cache.filter((member) => member.roles.cache.has(gameManagerRole.id));
   
-        const name = interaction.user.username;
+        const embed = new EmbedBuilder()
+          .setTitle('New Player Registration')
+          .setDescription(`${interaction.user.username} has requested to join the game.`)
+          .addFields(
+            { name: 'Discord ID', value: userId }
+          )
+          .setTimestamp();
   
-        db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId.toString(), name], async function (err) {
-          if (err) {
-            console.error('Error registering player:', err);
-            return interaction.reply('An error occurred while registering. Please try again later.');
-          }
-      
-          const playerId = this.lastID;
-      
-          if (config.game.allow_manual_approval) {
-            const gameManagerRole = interaction.guild.roles.cache.get(config.roles.game_manager);
-            const gameManagers = interaction.guild.members.cache.filter((member) => member.roles.cache.has(gameManagerRole.id));
-      
-            const embed = new EmbedBuilder()
-              .setTitle('New Player Registration')
-              .setDescription(`${interaction.user.username} has requested to join the game.`)
-              .addFields(
-                { name: 'Player ID', value: playerId.toString() },
-                { name: 'Discord ID', value: userId }
-              )
-              .setTimestamp();
-      
-            gameManagers.forEach((manager) => {
-              manager.send({ embeds: [embed] })
-                .then((sentMessage) => {
-                  sentMessage.react('✅')
-                    .then(() => sentMessage.react('❌'))
-                    .catch((error) => {
-                      console.error('Error adding reactions:', error);
-                    });
-                })
-                .catch((error) => {
-                  console.error('Error sending message to game manager:', error);
-                });
-            });
-      
-            interaction.reply('Your registration request has been submitted for manual approval. Please wait for a game manager to review your request.');
-          } else {
-              try {
-                const playerRole = interaction.guild.roles.cache.get(config.roles.player);
-                await interaction.member.roles.add(playerRole);
-                interaction.reply(`You have been successfully registered for the game and assigned the player role! Your player ID is: ${playerId}`);
-              } catch (error) {
-                console.error('Error assigning player role:', error);
-                interaction.reply('You have been successfully registered for the game, but there was an error assigning the player role. Please contact an admin.');
-              }
-            }
-          });
+        const approveButton = {
+          type: 2,
+          style: 3,
+          label: 'Approve',
+          custom_id: `approvePlayer_${userId}`,
+        };
+  
+        const rejectButton = {
+          type: 2,
+          style: 4,
+          label: 'Reject',
+          custom_id: `rejectPlayer_${userId}`,
+        };
+  
+        const actionRow = {
+          type: 1,
+          components: [approveButton, rejectButton],
+        };
+  
+        gameManagers.forEach((manager) => {
+          manager.send({ embeds: [embed], components: [actionRow] });
         });
-    }
-);}
-
-client.on('messageReactionAdd', async (reaction, user) => {
-  if (user.bot) return;
-
-  if (reaction.message.author.id === client.user.id && reaction.message.embeds.length > 0) {
-    const embed = reaction.message.embeds[0];
-    if (embed.title === 'New Player Registration') {
-      const playerId = embed.fields.find((field) => field.name === 'Player ID').value;
-
-      // Check if the reaction is added in a DM channel
-      if (reaction.message.channel.type === 'DM') {
-        // Check if the user who reacted is a game manager
-        const gameManagerRole = reaction.message.guild.roles.cache.get(config.roles.game_manager);
-        const member = await reaction.message.guild.members.fetch(user.id);
-
-        if (member.roles.cache.has(gameManagerRole.id)) {
-          if (reaction.emoji.name === '✅') {
-            approvePlayer(reaction.message, playerId);
-          } else if (reaction.emoji.name === '❌') {
-            rejectPlayer(reaction.message, playerId);
-          }
+  
+        interaction.reply('Your registration request has been submitted for manual approval. Please wait for a game manager to review your request.');
+      } else {
+        try {
+          await addPlayerToDatabase(userId, name);
+          const playerRole = interaction.guild.roles.cache.get(config.roles.player);
+          await interaction.member.roles.add(playerRole);
+          interaction.reply('You have been successfully registered for the game and assigned the player role!');
+        } catch (error) {
+          console.error('Error registering player:', error);
+          interaction.reply('An error occurred while registering. Please try again later.');
         }
       }
-    }
-  }
-});
-
-async function approvePlayer(message, playerId) {
-  try {
-    const gameManagerRoleId = config.roles.game_manager;
-    const gameManagerRole = message.guild.roles.cache.get(gameManagerRoleId);
-
-    if (!message.member.roles.cache.has(gameManagerRoleId)) {
-      return message.reply('Only game managers can approve player registration requests.');
-    }
-
-    db.get('SELECT * FROM players WHERE id = ?', [playerId], async (err, row) => {
-      if (err) {
-        console.error('Error fetching player:', err);
-        return message.reply('An error occurred while approving the player. Please try again later.');
-      }
-
-      if (!row) {
-        return message.reply('The specified player does not exist.');
-      }
-
-      try {
-        const playerRole = message.guild.roles.cache.get(config.roles.player);
-        const member = await message.guild.members.fetch(row.discord_id);
-        await member.roles.add(playerRole);
-        message.reply(`Player with ID ${playerId} has been approved and assigned the player role.`);
-      } catch (error) {
-        console.error('Error assigning player role:', error);
-        message.reply('An error occurred while approving the player. Please try again later.');
-      }
     });
-  } catch (error) {
-    console.error('Error approving player:', error);
-    message.reply('An error occurred while approving the player. Please try again later.');
   }
-}
-
-async function rejectPlayer(message, playerId) {
-  try {
-    const gameManagerRoleId = config.roles.game_manager;
-    const gameManagerRole = message.guild.roles.cache.get(gameManagerRoleId);
-
-    if (!message.member.roles.cache.has(gameManagerRoleId)) {
-      return message.reply('Only game managers can reject player registration requests.');
-    }
-
-    db.run('DELETE FROM players WHERE id = ?', [playerId], (err) => {
-      if (err) {
-        console.error('Error rejecting player:', err);
-        return message.reply('An error occurred while rejecting the player. Please try again later.');
-      }
-
-      message.reply(`Player with ID ${playerId} has been rejected.`);
+  
+  async function addPlayerToDatabase(userId, name) {
+    return new Promise((resolve, reject) => {
+      db.run('INSERT INTO players (discord_id, name) VALUES (?, ?)', [userId.toString(), name], function (err) {
+        if (err) {
+          console.error('Error adding player to database:', err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
     });
-  } catch (error) {
-    console.error('Error rejecting player:', error);
-    message.reply('An error occurred while rejecting the player. Please try again later.');
   }
-}
+
+  async function approvePlayer(interaction, userId) {
+    try {
+      const member = await interaction.guild.members.fetch(userId);
+      const name = member.user.username;
+  
+      await addPlayerToDatabase(userId, name);
+  
+      const playerRole = interaction.guild.roles.cache.get(config.roles.player);
+      await member.roles.add(playerRole);
+      interaction.reply(`Player ${name} has been approved and assigned the player role.`);
+  
+      member.send('Your registration request has been approved! You can now participate in the game.');
+    } catch (error) {
+      console.error('Error approving player:', error);
+      interaction.reply('An error occurred while approving the player. Please try again later.');
+    }
+  }
+
+  async function rejectPlayer(interaction, userId) {
+    try {
+      const member = await interaction.guild.members.fetch(userId);
+      const name = member.user.username;
+  
+      interaction.reply(`Player ${name}'s registration request has been rejected.`);
+  
+      member.send('Sorry, your registration request has been rejected. Please contact a game manager for more information.');
+    } catch (error) {
+      console.error('Error rejecting player:', error);
+      interaction.reply('An error occurred while rejecting the player. Please try again later.');
+    }
+  }
   
   async function handleTeamCreation(interaction) {
     const userId = interaction.user.id;
@@ -1313,6 +1263,15 @@ async function handleJoinButtonInteraction(interaction, action, playerId, teamId
     } else if (action === 'rejectPlayer') {
         const [playerId] = args;
         await rejectPlayer(interaction, playerId);
+    }
+    if (interaction.isButton()) {
+      const [action, playerId] = interaction.customId.split('_');
+  
+      if (action === 'approvePlayer') {
+        await approvePlayer(interaction, playerId);
+      } else if (action === 'rejectPlayer') {
+        await rejectPlayer(interaction, playerId);
+      }
     }
   });
 
