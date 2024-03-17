@@ -482,7 +482,7 @@ client.on('interactionCreate', async (interaction) => {
           return interaction.reply('The specified team does not exist.');
         }
   
-        if (BigInt(teamRow.owner_id).toString() === BigInt(playerRow.id).toString()) {
+        if (BigInt(teamRow.owner_id).toString() === BigInt(playerRow.discord_id).toString()) {
           // If the player is the team owner, transfer ownership to the next oldest member
           db.get('SELECT * FROM players WHERE team_id = ? AND discord_id != ? ORDER BY id LIMIT 1', [teamId, userId], (err, newOwnerRow) => {
             if (err) {
