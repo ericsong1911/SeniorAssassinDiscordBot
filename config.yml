@@ -6,7 +6,7 @@ bot:
 game:
   start_date: '2023-06-01T00:00:00'
   end_date: '2023-06-30T23:59:59'
-  require_manual_approval: true
+  allow_manual_approval: true
   max_team_size: 4
   min_team_count: 2
   time_limit_enabled: true

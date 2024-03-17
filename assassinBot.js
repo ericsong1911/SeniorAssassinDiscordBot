@@ -678,39 +678,50 @@ async function isGameManager(interaction) {
 }
 
 async function handleGameStart(interaction) {
-    const userId = interaction.user.id;
-    const isAdmin = await isGameManager(interaction);
-  
-    if (!isAdmin) {
-      return interaction.reply('You must be an admin to start the game.');
+  const userId = interaction.user.id;
+  const isAdmin = await isGameManager(interaction);
+
+  if (!isAdmin) {
+    return interaction.reply('You must be an admin to start the game.');
+  }
+
+  db.get('SELECT state FROM game_state', (err, row) => {
+    if (err) {
+      console.error('Error checking game state:', err);
+      return interaction.reply('An error occurred while starting the game. Please try again later.');
     }
-  
-    db.get('SELECT state FROM game_state', (err, row) => {
+
+    if (row.state === config.game.states.active) {
+      return interaction.reply('The game has already started and cannot be started again.');
+    }
+
+    db.all('SELECT * FROM players WHERE team_id IS NULL', (err, playersWithoutTeam) => {
       if (err) {
-        console.error('Error checking game state:', err);
+        console.error('Error checking players without a team:', err);
         return interaction.reply('An error occurred while starting the game. Please try again later.');
       }
-  
-      if (row.state === config.game.states.active) {
-        return interaction.reply('The game has already started and cannot be started again.');
+
+      if (playersWithoutTeam.length > 0) {
+        const playerList = playersWithoutTeam.map((player) => player.name).join(', ');
+        return interaction.reply(`The following players have not joined a team: ${playerList}. Please ensure all players have joined a team before starting the game.`);
       }
-  
+
       db.run('UPDATE game_state SET state = ?', [config.game.states.active], (err) => {
         if (err) {
           console.error('Error updating game state:', err);
           return interaction.reply('An error occurred while starting the game. Please try again later.');
         }
-  
+
         assignTargets();
-  
-        // Send a message to the status channel to announce the start of the game
+
         const statusChannel = client.channels.cache.get(config.channels.status);
         statusChannel.send('The game has started! Targets have been assigned to each team. Good luck and have fun!');
-  
+
         interaction.reply('The game has been started!');
       });
     });
-  }
+  });
+}
 
   async function handleAssassinationReport(interaction) {
     if (!isPlayer(interaction)) {
